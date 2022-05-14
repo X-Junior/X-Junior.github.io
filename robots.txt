@@ -1,1 +1,1 @@
-Sitemap: https://x-junior.github.io//sitemap.xml
+Sitemap: /sitemap.xml

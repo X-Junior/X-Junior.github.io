@@ -1,0 +1,1901 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.2">Jekyll</generator><link href="/feed.xml" rel="self" type="application/atom+xml" /><link href="/" rel="alternate" type="text/html" /><updated>2022-05-19T21:16:23+02:00</updated><id>/feed.xml</id><title type="html">XJunior</title><subtitle>Malware Analysis - Reverse Engineering - Cryptography</subtitle><author><name>Mohamed Ashraf</name></author><entry><title type="html">Deep Analysis of Mars Stealer</title><link href="/malware%20analysis/MarsStealer/" rel="alternate" type="text/html" title="Deep Analysis of Mars Stealer" /><published>2022-05-19T00:00:00+02:00</published><updated>2022-05-19T00:00:00+02:00</updated><id>/malware%20analysis/MarsStealer</id><content type="html" xml:base="/malware%20analysis/MarsStealer/">&lt;h1 id=&quot;introduction&quot;&gt;Introduction&lt;/h1&gt;
+
+&lt;p&gt;Mars Stealer is an improved copy of Oski Stealer. I saw alot of tweets recently about it so i decided to write an analysis of the newer version V8. Enjoy reading!&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Diffrences from the previous version:
+    &lt;ol&gt;
+      &lt;li&gt;Anti analysis technique&lt;/li&gt;
+      &lt;li&gt;Diffrent encryption algoithm&lt;/li&gt;
+      &lt;li&gt;Introudcing new anti debug technique&lt;/li&gt;
+      &lt;li&gt;New configuration format&lt;/li&gt;
+      &lt;li&gt;External dlls are in one zip file&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h1 id=&quot;overview&quot;&gt;Overview&lt;/h1&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/overview.png&quot; /&gt; 
+&lt;/p&gt;
+&lt;h1 id=&quot;anti-analysis&quot;&gt;Anti-Analysis&lt;/h1&gt;
+
+&lt;p&gt;Opening mars stealer in ida we can see an  anti-analysis trick called Opaque Predicates it’s a commonly used technique in program obfuscation, intended to add complexity to the control flow.&lt;/p&gt;
+
+&lt;p&gt;This obfuscation simply takes an absolute jump (JMP) and transforms it into two conditional jumps (JZ/JNZ). Depending on the value of the Zero flag (ZF), the execution will follow the first or second branch.&lt;/p&gt;
+
+&lt;p&gt;However, disassemblers are tricked into thinking that there is a fall-through branch if the second jump is not taken (which is impossible as one of them must be taken) and tries to disassemble the unreachable instructions (often invalid) resulting in garbage code.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/1.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;the deobfuscation is simple, we just need to patch the first conditional jump to an absolute jump and nop out the second jump, we can use IDAPython to achieve this:&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;idc&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;  &lt;span class=&quot;nb&quot;&gt;min&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ida_search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;find_binary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BADADDR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;74 ? 75 ?&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_NEXT&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_DOWN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# JZ / JNZ
+&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;ida_search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;find_binary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BADADDR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;75 ? 74 ?&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_NEXT&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_DOWN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# JNZ / JZ
+&lt;/span&gt;    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BADADDR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xEB&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x90&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x90&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x90&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/2.png&quot; /&gt; 
+&lt;/p&gt;
+&lt;center&gt;&lt;font size=&quot;3&quot;&gt; &lt;u&gt;After Running the Script &lt;/u&gt;&lt;/font&gt; &lt;/center&gt;
+
+&lt;p&gt;now we can see a clear view , after reversing and renaming&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/3.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/3.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/3-2.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/3-2.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;First Mars get a handle to kernel32.dll by parsing &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;InLoadOrderModuleList&lt;/code&gt; then it passes the handle to a fucntion that  loops over the exported functions of the DLL to get the address of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;LocalAlloc()&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;VirtualProtect()&lt;/code&gt; functions.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/4.png&quot; /&gt; 
+&lt;/p&gt;
+&lt;h1 id=&quot;string-encryption&quot;&gt;String Encryption&lt;/h1&gt;
+&lt;p&gt;After that it decrypts some strings used for some checks , the decryption is a simple xor function&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/5.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/6.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;We can although see that the xor function is refrenced in another function which i renamed as Decrypt_String_2 if the malware passes the checks which we will see soon it decrypt those string which contanis strings needed for the malware to steal sensitive data .&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/8.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;We use idapython script to get those strings and rename the variables to make reversing easier&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/7.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;string&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;sanitize_string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ascii_letters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])[:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;20&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;capitalize&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;X0r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;&quot;&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;chr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt;
+
+
+&lt;span class=&quot;n&quot;&gt;start_Addrs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00401770&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00401990&lt;/span&gt;  &lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;end_Addrs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00401967&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x0405444&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;string_list&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;dectypred_data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;sa&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;''&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;addrs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start_Addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start_Addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end_Addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_imm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)))&lt;/span&gt;
+
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_bytes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;key&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_bytes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;dectypred_data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;X0r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;string_list&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dectypred_data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;addrs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;call&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_cmt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dectypred_data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;mov&quot;&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_mem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_reg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Str&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sanitize_string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dectypred_data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SN_NOWARN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+        &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Here is a list of the decrypted strings :&lt;/p&gt;
+
+&lt;details style=&quot;color: #EEFFFF; font-family: monospace !default; font-size: 0.85em; background: #263238; border: 1px solid #263238; border-radius: 3px; padding: 10px; line-height: 2.2; overflow-x: scroll;&quot;&gt;
+    &lt;summary style=&quot;outline: none; cursor: pointer&quot;&gt;
+        &lt;span style=&quot;color: darkgray&quot;&gt;
+            Expand to see more
+        &lt;/span&gt;&lt;br /&gt;
+&lt;div style=&quot;height: 1px&quot;&gt;&lt;/div&gt;
+&amp;emsp; LoadLibraryA&lt;br /&gt;
+&amp;emsp; GetProcAddress&lt;br /&gt;
+&amp;emsp; ExitProcess&lt;br /&gt;
+&amp;emsp; advapi32.dll&lt;br /&gt;
+&amp;emsp; crypt32.dll&lt;br /&gt;
+&amp;emsp; GetTickCount&lt;br /&gt;
+&amp;emsp; Sleep&lt;br /&gt;
+&amp;emsp; GetUserDefaultLangID&lt;br /&gt;
+&amp;emsp; CreateMutexA&lt;br /&gt;
+&amp;emsp; GetLastError&lt;br /&gt;
+&lt;/summary&gt;
+&amp;emsp; HeapAlloc&lt;br /&gt;
+&amp;emsp; GetProcessHeap&lt;br /&gt;
+&amp;emsp; GetComputerNameA&lt;br /&gt;
+&amp;emsp; VirtualProtect&lt;br /&gt;
+&amp;emsp; GetCurrentProcess&lt;br /&gt;
+&amp;emsp; VirtualAllocExNuma&lt;br /&gt;
+&amp;emsp; GetUserNameA&lt;br /&gt;
+&amp;emsp; CryptStringToBinaryA&lt;br /&gt;
+&amp;emsp; HAL9TH&lt;br /&gt;
+&amp;emsp; JohnDoe&lt;br /&gt;
+&amp;emsp; ­6Ê§È/2022 20:00:00&lt;br /&gt;
+&amp;emsp; http://&lt;br /&gt;
+&amp;emsp; 194.87.218.39&lt;br /&gt;
+&amp;emsp; 92550737836278980100&lt;br /&gt;
+&amp;emsp; /RyC66VfSGP.php&lt;br /&gt;
+&amp;emsp; Default&lt;br /&gt;
+&amp;emsp; %hu/%hu/%hu %hu:%hu:%hu&lt;br /&gt;
+&amp;emsp; open&lt;br /&gt;
+&amp;emsp; sqlite3.dll&lt;br /&gt;
+&amp;emsp; C:\ProgramData\sqlite3.dll&lt;br /&gt;
+&amp;emsp; freebl3.dll&lt;br /&gt;
+&amp;emsp; C:\ProgramData\freebl3.dll&lt;br /&gt;
+&amp;emsp; mozglue.dll&lt;br /&gt;
+&amp;emsp; C:\ProgramData\mozglue.dll&lt;br /&gt;
+&amp;emsp; msvcp140.dll&lt;br /&gt;
+&amp;emsp; C:\ProgramData\msvcp140.dll&lt;br /&gt;
+&amp;emsp; nss3.dll&lt;br /&gt;
+&amp;emsp; C:\ProgramData\nss3.dll&lt;br /&gt;
+&amp;emsp; softokn3.dll&lt;br /&gt;
+&amp;emsp; C:\ProgramData\softokn3.dll&lt;br /&gt;
+&amp;emsp; vcruntime140.dll&lt;br /&gt;
+&amp;emsp; C:\ProgramData\vcruntime140.dll&lt;br /&gt;
+&amp;emsp; .zip&lt;br /&gt;
+&amp;emsp; Tag: &lt;br /&gt;
+&amp;emsp; IP: IP?&lt;br /&gt;
+&amp;emsp; Country: Country?&lt;br /&gt;
+&amp;emsp; Working Path: &lt;br /&gt;
+&amp;emsp; Local Time: &lt;br /&gt;
+&amp;emsp; TimeZone: &lt;br /&gt;
+&amp;emsp; Display Language: &lt;br /&gt;
+&amp;emsp; Keyboard Languages: &lt;br /&gt;
+&amp;emsp; Is Laptop: &lt;br /&gt;
+&amp;emsp; Processor: &lt;br /&gt;
+&amp;emsp; Installed RAM: &lt;br /&gt;
+&amp;emsp; OS: &lt;br /&gt;
+&amp;emsp;  (&lt;br /&gt;
+&amp;emsp;  Bit)&lt;br /&gt;
+&amp;emsp; Videocard: &lt;br /&gt;
+&amp;emsp; Display Resolution: &lt;br /&gt;
+&amp;emsp; PC name: &lt;br /&gt;
+&amp;emsp; User name: &lt;br /&gt;
+&amp;emsp; Domain name: &lt;br /&gt;
+&amp;emsp; MachineID: &lt;br /&gt;
+&amp;emsp; GUID: &lt;br /&gt;
+&amp;emsp; Installed Software: &lt;br /&gt;
+&amp;emsp; system.txt&lt;br /&gt;
+&amp;emsp; Grabber\%s.zip&lt;br /&gt;
+&amp;emsp; %APPDATA%&lt;br /&gt;
+&amp;emsp; %LOCALAPPDATA%&lt;br /&gt;
+&amp;emsp; %USERPROFILE%&lt;br /&gt;
+&amp;emsp; %DESKTOP%&lt;br /&gt;
+&amp;emsp; Wallets\&lt;br /&gt;
+&amp;emsp; Ethereum&lt;br /&gt;
+&amp;emsp; \Ethereum\&lt;br /&gt;
+&amp;emsp; keystore&lt;br /&gt;
+&amp;emsp; Electrum&lt;br /&gt;
+&amp;emsp; \Electrum\wallets\&lt;br /&gt;
+&amp;emsp; *.*&lt;br /&gt;
+&amp;emsp; ElectrumLTC&lt;br /&gt;
+&amp;emsp; \Electrum-LTC\wallets\&lt;br /&gt;
+&amp;emsp; Exodus&lt;br /&gt;
+&amp;emsp; \Exodus\&lt;br /&gt;
+&amp;emsp; exodus.conf.json&lt;br /&gt;
+&amp;emsp; window-state.json&lt;br /&gt;
+&amp;emsp; \Exodus\exodus.wallet\&lt;br /&gt;
+&amp;emsp; passphrase.json&lt;br /&gt;
+&amp;emsp; seed.seco&lt;br /&gt;
+&amp;emsp; info.seco&lt;br /&gt;
+&amp;emsp; ElectronCash&lt;br /&gt;
+&amp;emsp; \ElectronCash\wallets\&lt;br /&gt;
+&amp;emsp; default_wallet&lt;br /&gt;
+&amp;emsp; MultiDoge&lt;br /&gt;
+&amp;emsp; \MultiDoge\&lt;br /&gt;
+&amp;emsp; multidoge.wallet&lt;br /&gt;
+&amp;emsp; JAXX&lt;br /&gt;
+&amp;emsp; \jaxx\Local Storage\&lt;br /&gt;
+&amp;emsp; file__0.localstorage&lt;br /&gt;
+&amp;emsp; Atomic&lt;br /&gt;
+&amp;emsp; \atomic\Local Storage\leveldb\&lt;br /&gt;
+&amp;emsp; 000003.log&lt;br /&gt;
+&amp;emsp; CURRENT&lt;br /&gt;
+&amp;emsp; LOCK&lt;br /&gt;
+&amp;emsp; LOG&lt;br /&gt;
+&amp;emsp; MANIFEST-000001&lt;br /&gt;
+&amp;emsp; 0000*&lt;br /&gt;
+&amp;emsp; Binance&lt;br /&gt;
+&amp;emsp; \Binance\&lt;br /&gt;
+&amp;emsp; app-store.json&lt;br /&gt;
+&amp;emsp; Coinomi&lt;br /&gt;
+&amp;emsp; \Coinomi\Coinomi\wallets\&lt;br /&gt;
+&amp;emsp; *.wallet&lt;br /&gt;
+&amp;emsp; *.config&lt;br /&gt;
+&amp;emsp; *wallet*.dat&lt;br /&gt;
+&amp;emsp; GetSystemTime&lt;br /&gt;
+&amp;emsp; lstrcatA&lt;br /&gt;
+&amp;emsp; SystemTimeToFileTime&lt;br /&gt;
+&amp;emsp; ntdll.dll&lt;br /&gt;
+&amp;emsp; sscanf&lt;br /&gt;
+&amp;emsp; memset&lt;br /&gt;
+&amp;emsp; memcpy&lt;br /&gt;
+&amp;emsp; wininet.dll&lt;br /&gt;
+&amp;emsp; user32.dll&lt;br /&gt;
+&amp;emsp; gdi32.dll&lt;br /&gt;
+&amp;emsp; netapi32.dll&lt;br /&gt;
+&amp;emsp; psapi.dll&lt;br /&gt;
+&amp;emsp; bcrypt.dll&lt;br /&gt;
+&amp;emsp; vaultcli.dll&lt;br /&gt;
+&amp;emsp; shlwapi.dll&lt;br /&gt;
+&amp;emsp; shell32.dll&lt;br /&gt;
+&amp;emsp; gdiplus.dll&lt;br /&gt;
+&amp;emsp; ole32.dll&lt;br /&gt;
+&amp;emsp; dbghelp.dll&lt;br /&gt;
+&amp;emsp; CreateFileA&lt;br /&gt;
+&amp;emsp; WriteFile&lt;br /&gt;
+&amp;emsp; CloseHandle&lt;br /&gt;
+&amp;emsp; GetFileSize&lt;br /&gt;
+&amp;emsp; lstrlenA&lt;br /&gt;
+&amp;emsp; LocalAlloc&lt;br /&gt;
+&amp;emsp; GlobalFree&lt;br /&gt;
+&amp;emsp; ReadFile&lt;br /&gt;
+&amp;emsp; OpenProcess&lt;br /&gt;
+&amp;emsp; SetFilePointer&lt;br /&gt;
+&amp;emsp; SetEndOfFile&lt;br /&gt;
+&amp;emsp; GetCurrentProcessId&lt;br /&gt;
+&amp;emsp; GetLocalTime&lt;br /&gt;
+&amp;emsp; GetTimeZoneInformation&lt;br /&gt;
+&amp;emsp; GetUserDefaultLocaleName&lt;br /&gt;
+&amp;emsp; LocalFree&lt;br /&gt;
+&amp;emsp; GetSystemPowerStatus&lt;br /&gt;
+&amp;emsp; GetSystemInfo&lt;br /&gt;
+&amp;emsp; GlobalMemoryStatusEx&lt;br /&gt;
+&amp;emsp; IsWow64Process&lt;br /&gt;
+&amp;emsp; GetTempPathA&lt;br /&gt;
+&amp;emsp; GetLocaleInfoA&lt;br /&gt;
+&amp;emsp; GetFileSizeEx&lt;br /&gt;
+&amp;emsp; GetFileAttributesA&lt;br /&gt;
+&amp;emsp; FindFirstFileA&lt;br /&gt;
+&amp;emsp; FindNextFileA&lt;br /&gt;
+&amp;emsp; FindClose&lt;br /&gt;
+&amp;emsp; GetCurrentDirectoryA&lt;br /&gt;
+&amp;emsp; CopyFileA&lt;br /&gt;
+&amp;emsp; DeleteFileA&lt;br /&gt;
+&amp;emsp; lstrcmpW&lt;br /&gt;
+&amp;emsp; GlobalAlloc&lt;br /&gt;
+&amp;emsp; FreeLibrary&lt;br /&gt;
+&amp;emsp; SetCurrentDirectoryA&lt;br /&gt;
+&amp;emsp; CreateFileMappingA&lt;br /&gt;
+&amp;emsp; MapViewOfFile&lt;br /&gt;
+&amp;emsp; UnmapViewOfFile&lt;br /&gt;
+&amp;emsp; FileTimeToSystemTime&lt;br /&gt;
+&amp;emsp; GetFileInformationByHandle&lt;br /&gt;
+&amp;emsp; GlobalLock&lt;br /&gt;
+&amp;emsp; GlobalSize&lt;br /&gt;
+&amp;emsp; WideCharToMultiByte&lt;br /&gt;
+&amp;emsp; GetWindowsDirectoryA&lt;br /&gt;
+&amp;emsp; GetVolumeInformationA&lt;br /&gt;
+&amp;emsp; GetVersionExA&lt;br /&gt;
+&amp;emsp; GetModuleFileNameA&lt;br /&gt;
+&amp;emsp; CreateFileW&lt;br /&gt;
+&amp;emsp; CreateFileMappingW&lt;br /&gt;
+&amp;emsp; MultiByteToWideChar&lt;br /&gt;
+&amp;emsp; CreateThread&lt;br /&gt;
+&amp;emsp; GetEnvironmentVariableA&lt;br /&gt;
+&amp;emsp; SetEnvironmentVariableA&lt;br /&gt;
+&amp;emsp; lstrcpyA&lt;br /&gt;
+&amp;emsp; lstrcpynA&lt;br /&gt;
+&amp;emsp; InternetOpenA&lt;br /&gt;
+&amp;emsp; InternetConnectA&lt;br /&gt;
+&amp;emsp; HttpOpenRequestA&lt;br /&gt;
+&amp;emsp; HttpSendRequestA&lt;br /&gt;
+&amp;emsp; HttpQueryInfoA&lt;br /&gt;
+&amp;emsp; InternetCloseHandle&lt;br /&gt;
+&amp;emsp; InternetReadFile&lt;br /&gt;
+&amp;emsp; InternetSetOptionA&lt;br /&gt;
+&amp;emsp; InternetOpenUrlA&lt;br /&gt;
+&amp;emsp; InternetCrackUrlA&lt;br /&gt;
+&amp;emsp; wsprintfA&lt;br /&gt;
+&amp;emsp; CharToOemW&lt;br /&gt;
+&amp;emsp; GetKeyboardLayoutList&lt;br /&gt;
+&amp;emsp; EnumDisplayDevicesA&lt;br /&gt;
+&amp;emsp; ReleaseDC&lt;br /&gt;
+&amp;emsp; GetDC&lt;br /&gt;
+&amp;emsp; GetSystemMetrics&lt;br /&gt;
+&amp;emsp; GetDesktopWindow&lt;br /&gt;
+&amp;emsp; GetWindowRect&lt;br /&gt;
+&amp;emsp; GetWindowDC&lt;br /&gt;
+&amp;emsp; CloseWindow&lt;br /&gt;
+&amp;emsp; RegOpenKeyExA&lt;br /&gt;
+&amp;emsp; RegQueryValueExA&lt;br /&gt;
+&amp;emsp; RegCloseKey&lt;br /&gt;
+&amp;emsp; GetCurrentHwProfileA&lt;br /&gt;
+&amp;emsp; RegEnumKeyExA&lt;br /&gt;
+&amp;emsp; RegGetValueA&lt;br /&gt;
+&amp;emsp; CreateDCA&lt;br /&gt;
+&amp;emsp; GetDeviceCaps&lt;br /&gt;
+&amp;emsp; CreateCompatibleDC&lt;br /&gt;
+&amp;emsp; CreateCompatibleBitmap&lt;br /&gt;
+&amp;emsp; SelectObject&lt;br /&gt;
+&amp;emsp; BitBlt&lt;br /&gt;
+&amp;emsp; DeleteObject&lt;br /&gt;
+&amp;emsp; StretchBlt&lt;br /&gt;
+&amp;emsp; GetObjectW&lt;br /&gt;
+&amp;emsp; GetDIBits&lt;br /&gt;
+&amp;emsp; SaveDC&lt;br /&gt;
+&amp;emsp; CreateDIBSection&lt;br /&gt;
+&amp;emsp; DeleteDC&lt;br /&gt;
+&amp;emsp; RestoreDC&lt;br /&gt;
+&amp;emsp; DsRoleGetPrimaryDomainInformation&lt;br /&gt;
+&amp;emsp; GetModuleFileNameExA&lt;br /&gt;
+&amp;emsp; CryptUnprotectData&lt;br /&gt;
+&amp;emsp; BCryptCloseAlgorithmProvider&lt;br /&gt;
+&amp;emsp; BCryptDestroyKey&lt;br /&gt;
+&amp;emsp; BCryptOpenAlgorithmProvider&lt;br /&gt;
+&amp;emsp; BCryptSetProperty&lt;br /&gt;
+&amp;emsp; BCryptGenerateSymmetricKey&lt;br /&gt;
+&amp;emsp; BCryptDecrypt&lt;br /&gt;
+&amp;emsp; VaultOpenVault&lt;br /&gt;
+&amp;emsp; VaultCloseVault&lt;br /&gt;
+&amp;emsp; VaultEnumerateItems&lt;br /&gt;
+&amp;emsp; VaultGetItemWin8&lt;br /&gt;
+&amp;emsp; VaultGetItemWin7&lt;br /&gt;
+&amp;emsp; VaultFree&lt;br /&gt;
+&amp;emsp; StrCmpCA&lt;br /&gt;
+&amp;emsp; StrStrA&lt;br /&gt;
+&amp;emsp; PathMatchSpecA&lt;br /&gt;
+&amp;emsp; SHGetFolderPathA&lt;br /&gt;
+&amp;emsp; ShellExecuteExA&lt;br /&gt;
+&amp;emsp; GdipGetImageEncodersSize&lt;br /&gt;
+&amp;emsp; GdipGetImageEncoders&lt;br /&gt;
+&amp;emsp; GdipCreateBitmapFromHBITMAP&lt;br /&gt;
+&amp;emsp; GdiplusStartup&lt;br /&gt;
+&amp;emsp; GdiplusShutdown&lt;br /&gt;
+&amp;emsp; GdipSaveImageToStream&lt;br /&gt;
+&amp;emsp; GdipDisposeImage&lt;br /&gt;
+&amp;emsp; GdipFree&lt;br /&gt;
+&amp;emsp; CreateStreamOnHGlobal&lt;br /&gt;
+&amp;emsp; GetHGlobalFromStream&lt;br /&gt;
+&amp;emsp; SymMatchString&lt;br /&gt;
+&amp;emsp; HEAD&lt;br /&gt;
+&amp;emsp; HTTP/1.1&lt;br /&gt;
+&amp;emsp; GET&lt;br /&gt;
+&amp;emsp; POST&lt;br /&gt;
+&amp;emsp; file&lt;br /&gt;
+&amp;emsp; Content-Type: multipart/form-data; boundary=----&lt;br /&gt;
+&amp;emsp; Content-Disposition: form-data; name=&quot;&lt;br /&gt;
+&amp;emsp; Content-Disposition: form-data; name=&quot;file&quot;; filename=&quot;&lt;br /&gt;
+&amp;emsp; Content-Type: application/octet-stream&lt;br /&gt;
+&amp;emsp; Content-Transfer-Encoding: binary&lt;br /&gt;
+&amp;emsp; SOFT: &lt;br /&gt;
+&amp;emsp; PROF: ?&lt;br /&gt;
+&amp;emsp; PROF: &lt;br /&gt;
+&amp;emsp; HOST: &lt;br /&gt;
+&amp;emsp; USER: &lt;br /&gt;
+&amp;emsp; PASS: &lt;br /&gt;
+&amp;emsp; sqlite3_open&lt;br /&gt;
+&amp;emsp; sqlite3_prepare_v2&lt;br /&gt;
+&amp;emsp; sqlite3_step&lt;br /&gt;
+&amp;emsp; sqlite3_column_text&lt;br /&gt;
+&amp;emsp; sqlite3_finalize&lt;br /&gt;
+&amp;emsp; sqlite3_close&lt;br /&gt;
+&amp;emsp; sqlite3_column_bytes&lt;br /&gt;
+&amp;emsp; sqlite3_column_blob&lt;br /&gt;
+&amp;emsp; encrypted_key&lt;br /&gt;
+&amp;emsp; &quot;}&lt;br /&gt;
+&amp;emsp; PATH&lt;br /&gt;
+&amp;emsp; PATH=&lt;br /&gt;
+&amp;emsp; NSS_Init&lt;br /&gt;
+&amp;emsp; NSS_Shutdown&lt;br /&gt;
+&amp;emsp; PK11_GetInternalKeySlot&lt;br /&gt;
+&amp;emsp; PK11_FreeSlot&lt;br /&gt;
+&amp;emsp; PK11_Authenticate&lt;br /&gt;
+&amp;emsp; PK11SDR_Decrypt&lt;br /&gt;
+&amp;emsp; SELECT origin_url, username_value, password_value FROM logins&lt;br /&gt;
+&amp;emsp; Cookies\%s_%s.txt&lt;br /&gt;
+&amp;emsp; SELECT HOST_KEY , is_httponly , path , is_secure , (expires_utc/1000000)-11644480800 , name , encrypted_value from cookies&lt;br /&gt;
+&amp;emsp; TRUE&lt;br /&gt;
+&amp;emsp; FALSE&lt;br /&gt;
+&amp;emsp; Autofill\%s_%s.txt&lt;br /&gt;
+&amp;emsp; SELECT name, value FROM autofill&lt;br /&gt;
+&amp;emsp; CC\%s_%s.txt&lt;br /&gt;
+&amp;emsp; SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards&lt;br /&gt;
+&amp;emsp; Card number: &lt;br /&gt;
+&amp;emsp; 
+Name on card: &lt;br /&gt;
+&amp;emsp; 
+Expiration date: &lt;br /&gt;
+&amp;emsp; History\%s_%s.txt&lt;br /&gt;
+&amp;emsp; SELECT url FROM urls&lt;br /&gt;
+&amp;emsp; Downloads\%s_%s.txt&lt;br /&gt;
+&amp;emsp; SELECT target_path, tab_url from downloads&lt;br /&gt;
+&amp;emsp; Login Data&lt;br /&gt;
+&amp;emsp; Cookies&lt;br /&gt;
+&amp;emsp; Web Data&lt;br /&gt;
+&amp;emsp; History&lt;br /&gt;
+&amp;emsp; SELECT host, isHttpOnly, path, isSecure, expiry, name, value FROM moz_cookies&lt;br /&gt;
+&amp;emsp; logins.json&lt;br /&gt;
+&amp;emsp; formSubmitURL&lt;br /&gt;
+&amp;emsp; usernameField&lt;br /&gt;
+&amp;emsp; encryptedUsername&lt;br /&gt;
+&amp;emsp; encryptedPassword&lt;br /&gt;
+&amp;emsp; guid&lt;br /&gt;
+&amp;emsp; SELECT fieldname, value FROM moz_formhistory&lt;br /&gt;
+&amp;emsp; SELECT url FROM moz_places&lt;br /&gt;
+&amp;emsp; cookies.sqlite&lt;br /&gt;
+&amp;emsp; formhistory.sqlite&lt;br /&gt;
+&amp;emsp; places.sqlite&lt;br /&gt;
+&amp;emsp; \Local State&lt;br /&gt;
+&amp;emsp; ..\profiles.ini&lt;br /&gt;
+&amp;emsp; C:\ProgramData\&lt;br /&gt;
+&amp;emsp; Chrome&lt;br /&gt;
+&amp;emsp; \Google\Chrome\User Data&lt;br /&gt;
+&amp;emsp; ChromeBeta&lt;br /&gt;
+&amp;emsp; \Google\Chrome Beta\User Data&lt;br /&gt;
+&amp;emsp; ChromeCanary&lt;br /&gt;
+&amp;emsp; \Google\Chrome SxS\User Data&lt;br /&gt;
+&amp;emsp; Chromium&lt;br /&gt;
+&amp;emsp; \Chromium\User Data&lt;br /&gt;
+&amp;emsp; Edge_Chromium&lt;br /&gt;
+&amp;emsp; \Microsoft\Edge\User Data&lt;br /&gt;
+&amp;emsp; Kometa&lt;br /&gt;
+&amp;emsp; \Kometa\User Data&lt;br /&gt;
+&amp;emsp; Amigo&lt;br /&gt;
+&amp;emsp; \Amigo\User Data&lt;br /&gt;
+&amp;emsp; Torch&lt;br /&gt;
+&amp;emsp; \Torch\User Data&lt;br /&gt;
+&amp;emsp; Orbitum&lt;br /&gt;
+&amp;emsp; \Orbitum\User Data&lt;br /&gt;
+&amp;emsp; Comodo&lt;br /&gt;
+&amp;emsp; \Comodo\Dragon\User Data&lt;br /&gt;
+&amp;emsp; Nichrome&lt;br /&gt;
+&amp;emsp; \Nichrome\User Data&lt;br /&gt;
+&amp;emsp; Maxthon5&lt;br /&gt;
+&amp;emsp; \Maxthon5\Users&lt;br /&gt;
+&amp;emsp; Sputnik&lt;br /&gt;
+&amp;emsp; \Sputnik\User Data&lt;br /&gt;
+&amp;emsp; EPB&lt;br /&gt;
+&amp;emsp; \Epic Privacy Browser\User Data&lt;br /&gt;
+&amp;emsp; Vivaldi&lt;br /&gt;
+&amp;emsp; \Vivaldi\User Data&lt;br /&gt;
+&amp;emsp; CocCoc&lt;br /&gt;
+&amp;emsp; \CocCoc\Browser\User Data&lt;br /&gt;
+&amp;emsp; Uran&lt;br /&gt;
+&amp;emsp; \uCozMedia\Uran\User Data&lt;br /&gt;
+&amp;emsp; QIP&lt;br /&gt;
+&amp;emsp; \QIP Surf\User Data&lt;br /&gt;
+&amp;emsp; Cent&lt;br /&gt;
+&amp;emsp; \CentBrowser\User Data&lt;br /&gt;
+&amp;emsp; Elements&lt;br /&gt;
+&amp;emsp; \Elements Browser\User Data&lt;br /&gt;
+&amp;emsp; TorBro&lt;br /&gt;
+&amp;emsp; \TorBro\Profile&lt;br /&gt;
+&amp;emsp; CryptoTab&lt;br /&gt;
+&amp;emsp; \CryptoTab Browser\User Data&lt;br /&gt;
+&amp;emsp; Brave&lt;br /&gt;
+&amp;emsp; \BraveSoftware\Brave-Browser\User Data&lt;br /&gt;
+&amp;emsp; Opera&lt;br /&gt;
+&amp;emsp; \Opera Software\Opera Stable\&lt;br /&gt;
+&amp;emsp; OperaGX&lt;br /&gt;
+&amp;emsp; \Opera Software\Opera GX Stable\&lt;br /&gt;
+&amp;emsp; OperaNeon&lt;br /&gt;
+&amp;emsp; \Opera Software\Opera Neon\User Data&lt;br /&gt;
+&amp;emsp; Firefox&lt;br /&gt;
+&amp;emsp; \Mozilla\Firefox\Profiles\&lt;br /&gt;
+&amp;emsp; SlimBrowser&lt;br /&gt;
+&amp;emsp; \FlashPeak\SlimBrowser\Profiles\&lt;br /&gt;
+&amp;emsp; PaleMoon&lt;br /&gt;
+&amp;emsp; \Moonchild Productions\Pale Moon\Profiles\&lt;br /&gt;
+&amp;emsp; Waterfox&lt;br /&gt;
+&amp;emsp; \Waterfox\Profiles\&lt;br /&gt;
+&amp;emsp; Cyberfox&lt;br /&gt;
+&amp;emsp; \8pecxstudios\Cyberfox\Profiles\&lt;br /&gt;
+&amp;emsp; BlackHawk&lt;br /&gt;
+&amp;emsp; \NETGATE Technologies\BlackHawk\Profiles\&lt;br /&gt;
+&amp;emsp; IceCat&lt;br /&gt;
+&amp;emsp; \Mozilla\icecat\Profiles\&lt;br /&gt;
+&amp;emsp; KMeleon&lt;br /&gt;
+&amp;emsp; \K-Meleon\&lt;br /&gt;
+&amp;emsp; Thunderbird&lt;br /&gt;
+&amp;emsp; \Thunderbird\Profiles\&lt;br /&gt;
+&amp;emsp; passwords.txt&lt;br /&gt;
+&amp;emsp; ibnejdfjmmkpcnlpebklmnkoeoihofec&lt;br /&gt;
+&amp;emsp; TronLink&lt;br /&gt;
+&amp;emsp; nkbihfbeogaeaoehlefnkodbefgpgknn&lt;br /&gt;
+&amp;emsp; MetaMask&lt;br /&gt;
+&amp;emsp; fhbohimaelbohpjbbldcngcnapndodjp&lt;br /&gt;
+&amp;emsp; Binance Chain Wallet&lt;br /&gt;
+&amp;emsp; ffnbelfdoeiohenkjibnmadjiehjhajb&lt;br /&gt;
+&amp;emsp; Yoroi&lt;br /&gt;
+&amp;emsp; jbdaocneiiinmjbjlgalhcelgbejmnid&lt;br /&gt;
+&amp;emsp; Nifty Wallet&lt;br /&gt;
+&amp;emsp; afbcbjpbpfadlkmhmclhkeeodmamcflc&lt;br /&gt;
+&amp;emsp; Math Wallet&lt;br /&gt;
+&amp;emsp; hnfanknocfeofbddgcijnmhnfnkdnaad&lt;br /&gt;
+&amp;emsp; Coinbase Wallet&lt;br /&gt;
+&amp;emsp; hpglfhgfnhbgpjdenjgmdgoeiappafln&lt;br /&gt;
+&amp;emsp; Guarda&lt;br /&gt;
+&amp;emsp; blnieiiffboillknjnepogjhkgnoapac&lt;br /&gt;
+&amp;emsp; EQUAL Wallet&lt;br /&gt;
+&amp;emsp; cjelfplplebdjjenllpjcblmjkfcffne&lt;br /&gt;
+&amp;emsp; Jaxx Liberty&lt;br /&gt;
+&amp;emsp; fihkakfobkmkjojpchpfgcmhfjnmnfpi&lt;br /&gt;
+&amp;emsp; BitApp Wallet&lt;br /&gt;
+&amp;emsp; kncchdigobghenbbaddojjnnaogfppfj&lt;br /&gt;
+&amp;emsp; iWallet&lt;br /&gt;
+&amp;emsp; amkmjjmmflddogmhpjloimipbofnfjih&lt;br /&gt;
+&amp;emsp; Wombat&lt;br /&gt;
+&amp;emsp; nlbmnnijcnlegkjjpcfjclmcfggfefdm&lt;br /&gt;
+&amp;emsp; MEW CX&lt;br /&gt;
+&amp;emsp; nanjmdknhkinifnkgdcggcfnhdaammmj&lt;br /&gt;
+&amp;emsp; GuildWallet&lt;br /&gt;
+&amp;emsp; nkddgncdjgjfcddamfgcmfnlhccnimig&lt;br /&gt;
+&amp;emsp; Saturn Wallet&lt;br /&gt;
+&amp;emsp; fnjhmkhhmkbjkkabndcnnogagogbneec&lt;br /&gt;
+&amp;emsp; Ronin Wallet&lt;br /&gt;
+&amp;emsp; cphhlgmgameodnhkjdmkpanlelnlohao&lt;br /&gt;
+&amp;emsp; NeoLine&lt;br /&gt;
+&amp;emsp; nhnkbkgjikgcigadomkphalanndcapjk&lt;br /&gt;
+&amp;emsp; Clover Wallet&lt;br /&gt;
+&amp;emsp; kpfopkelmapcoipemfendmdcghnegimn&lt;br /&gt;
+&amp;emsp; Liquality Wallet&lt;br /&gt;
+&amp;emsp; aiifbnbfobpmeekipheeijimdpnlpgpp&lt;br /&gt;
+&amp;emsp; Terra Station&lt;br /&gt;
+&amp;emsp; dmkamcknogkgcdfhhbddcghachkejeap&lt;br /&gt;
+&amp;emsp; Keplr&lt;br /&gt;
+&amp;emsp; fhmfendgdocmcbmfikdcogofphimnkno&lt;br /&gt;
+&amp;emsp; Sollet&lt;br /&gt;
+&amp;emsp; cnmamaachppnkjgnildpdmkaakejnhae&lt;br /&gt;
+&amp;emsp; Auro Wallet&lt;br /&gt;
+&amp;emsp; jojhfeoedkpkglbfimdfabpdfjaoolaf&lt;br /&gt;
+&amp;emsp; Polymesh Wallet&lt;br /&gt;
+&amp;emsp; flpiciilemghbmfalicajoolhkkenfel&lt;br /&gt;
+&amp;emsp; ICONex&lt;br /&gt;
+&amp;emsp; nknhiehlklippafakaeklbeglecifhad&lt;br /&gt;
+&amp;emsp; Nabox Wallet&lt;br /&gt;
+&amp;emsp; hcflpincpppdclinealmandijcmnkbgn&lt;br /&gt;
+&amp;emsp; KHC&lt;br /&gt;
+&amp;emsp; ookjlbkiijinhpmnjffcofjonbfbgaoc&lt;br /&gt;
+&amp;emsp; Temple&lt;br /&gt;
+&amp;emsp; mnfifefkajgofkcjkemidiaecocnkjeh&lt;br /&gt;
+&amp;emsp; TezBox&lt;br /&gt;
+&amp;emsp; dkdedlpgdmmkkfjabffeganieamfklkm&lt;br /&gt;
+&amp;emsp; Cyano Wallet&lt;br /&gt;
+&amp;emsp; nlgbhdfgdhgbiamfdfmbikcdghidoadd&lt;br /&gt;
+&amp;emsp; Byone&lt;br /&gt;
+&amp;emsp; infeboajgfhgbjpjbeppbkgnabfdkdaf&lt;br /&gt;
+&amp;emsp; OneKey&lt;br /&gt;
+&amp;emsp; cihmoadaighcejopammfbmddcmdekcje&lt;br /&gt;
+&amp;emsp; LeafWallet&lt;br /&gt;
+&amp;emsp; lodccjjbdhfakaekdiahmedfbieldgik&lt;br /&gt;
+&amp;emsp; DAppPlay&lt;br /&gt;
+&amp;emsp; ijmpgkjfkbfhoebgogflfebnmejmfbml&lt;br /&gt;
+&amp;emsp; BitClip&lt;br /&gt;
+&amp;emsp; lkcjlnjfpbikmcmbachjpdbijejflpcm&lt;br /&gt;
+&amp;emsp; Steem Keychain&lt;br /&gt;
+&amp;emsp; onofpnbbkehpmmoabgpcpmigafmmnjhl&lt;br /&gt;
+&amp;emsp; Nash Extension&lt;br /&gt;
+&amp;emsp; bcopgchhojmggmffilplmbdicgaihlkp&lt;br /&gt;
+&amp;emsp; Hycon Lite Client&lt;br /&gt;
+&amp;emsp; klnaejjgbibmhlephnhpmaofohgkpgkd&lt;br /&gt;
+&amp;emsp; ZilPay&lt;br /&gt;
+&amp;emsp; aeachknmefphepccionboohckonoeemg&lt;br /&gt;
+&amp;emsp; Coin98 Wallet&lt;br /&gt;
+&amp;emsp; bfnaelmomeimhlpmgjnjophhpkkoljpa&lt;br /&gt;
+&amp;emsp; Phantom&lt;br /&gt;
+&amp;emsp; hifafgmccdpekplomjjkcfgodnhcellj&lt;br /&gt;
+&amp;emsp; Crypto.com&lt;br /&gt;
+&amp;emsp; dngmlblcodfobpdpecaadgfbcggfjfnm&lt;br /&gt;
+&amp;emsp; Maiar DeFi Wallet&lt;br /&gt;
+&amp;emsp; ppdadbejkmjnefldpcdjhnkpbjkikoip&lt;br /&gt;
+&amp;emsp; Oasis&lt;br /&gt;
+&amp;emsp; hpbgcgmiemanfelegbndmhieiigkackl&lt;br /&gt;
+&amp;emsp; MonstaWallet&lt;br /&gt;
+&amp;emsp; fcckkdbjnoikooededlapcalpionmalo&lt;br /&gt;
+&amp;emsp; MOBOX&lt;br /&gt;
+&amp;emsp; jccapkebeeiajkkdemacblkjhhhboiek&lt;br /&gt;
+&amp;emsp; Crust Wallet&lt;br /&gt;
+&amp;emsp; mgffkfbidihjpoaomajlbgchddlicgpn&lt;br /&gt;
+&amp;emsp; Pali Wallet&lt;br /&gt;
+&amp;emsp; nphplpgoakhhjchkkhmiggakijnkhfnd&lt;br /&gt;
+&amp;emsp; TON Wallet&lt;br /&gt;
+&amp;emsp; ldinpeekobnhjjdofggfgjlcehhmanlj&lt;br /&gt;
+&amp;emsp; Hiro Wallet&lt;br /&gt;
+&amp;emsp; pocmplpaccanhmnllbbkpgfliimjljgo&lt;br /&gt;
+&amp;emsp; Slope Wallet&lt;br /&gt;
+&amp;emsp; bhhhlbepdkbapadjdnnojkbgioiodbic&lt;br /&gt;
+&amp;emsp; Solflare Wallet&lt;br /&gt;
+&amp;emsp; pgiaagfkgcbnmiiolekcfmljdagdhlcm&lt;br /&gt;
+&amp;emsp; Stargazer Wallet&lt;br /&gt;
+&amp;emsp; cgeeodpfagjceefieflmdfphplkenlfk&lt;br /&gt;
+&amp;emsp; EVER Wallet&lt;br /&gt;
+&amp;emsp; gjkdbeaiifkpoencioahhcilildpjhgh&lt;br /&gt;
+&amp;emsp; partisia-wallet&lt;br /&gt;
+&amp;emsp; bgjogpoidejdemgoochpnkmdjpocgkha&lt;br /&gt;
+&amp;emsp; Ecto Wallet&lt;br /&gt;
+&amp;emsp; ifckdpamphokdglkkdomedpdegcjhjdp&lt;br /&gt;
+&amp;emsp; ONTO Wallet&lt;br /&gt;
+&amp;emsp; agechnindjilpccclelhlbjphbgnobpf&lt;br /&gt;
+&amp;emsp; Fractal Wallet&lt;br /&gt;
+&amp;emsp; algblmhagnobbnmakepomicmfljlbehg&lt;br /&gt;
+&amp;emsp; ADS Wallet&lt;br /&gt;
+&amp;emsp; imijjbmbnebfnbmonjeileijahaipglj&lt;br /&gt;
+&amp;emsp; Moonlet Wallet&lt;br /&gt;
+&amp;emsp; kpjdchaapjheajadlaakiiigcbhoppda&lt;br /&gt;
+&amp;emsp; ZEBEDEE&lt;br /&gt;
+&amp;emsp; dlcobpjiigpikoobohmabehhmhfoodbb&lt;br /&gt;
+&amp;emsp; Argent X StarkNet Wallet&lt;br /&gt;
+&amp;emsp; bofddndhbegljegmpmnlbhcejofmjgbn&lt;br /&gt;
+&amp;emsp; X-Wallet&lt;br /&gt;
+&amp;emsp; mapbhaebnddapnmifbbkgeedkeplgjmf&lt;br /&gt;
+&amp;emsp; Biport Wallet&lt;br /&gt;
+&amp;emsp; kfdniefadaanbjodldohaedphafoffoh&lt;br /&gt;
+&amp;emsp; Typhon Wallet&lt;br /&gt;
+&amp;emsp; jaooiolkmfcmloonphpiiogkfckgciom&lt;br /&gt;
+&amp;emsp; Twetch Wallet&lt;br /&gt;
+&amp;emsp; aijcbedoijmgnlmjeegjaglmepbmpkpi&lt;br /&gt;
+&amp;emsp; Leap Wallet&lt;br /&gt;
+&amp;emsp; fhfffofbcgbjjojdnpcfompojdjjhdim&lt;br /&gt;
+&amp;emsp; Lamden Wallet&lt;br /&gt;
+&amp;emsp; agkfnefiabmfpanochlcakggnkdfmmjd&lt;br /&gt;
+&amp;emsp; Earth Wallet&lt;br /&gt;
+&amp;emsp; lpfcbjknijpeeillifnkikgncikgfhdo&lt;br /&gt;
+&amp;emsp; Nami&lt;br /&gt;
+&amp;emsp; fecfflganphcinpahcklgahckeohalog&lt;br /&gt;
+&amp;emsp; Coin Wallet&lt;br /&gt;
+&amp;emsp; ilhaljfiglknggcoegeknjghdgampffk&lt;br /&gt;
+&amp;emsp; Beam Web Wallet&lt;br /&gt;
+&amp;emsp; dklmlehijiaepdijfnbbhncfpcoeeljf&lt;br /&gt;
+&amp;emsp; FShares Wallet&lt;br /&gt;
+&amp;emsp; fkhebcilafocjhnlcngogekljmllgdhd&lt;br /&gt;
+&amp;emsp; WAGMIswap.io Wallet&lt;br /&gt;
+&amp;emsp; laphpbhjhhgigmjoflgcchgodbbclahk&lt;br /&gt;
+&amp;emsp; BLUE - Worlds Safest and Simplest Wallet&lt;br /&gt;
+&amp;emsp; mkjjflkhdddfjhonakofipfojoepfndk&lt;br /&gt;
+&amp;emsp; Unification Web Wallet&lt;br /&gt;
+&amp;emsp; jnldfbidonfeldmalbflbmlebbipcnle&lt;br /&gt;
+&amp;emsp; Infinity Wallet&lt;br /&gt;
+&amp;emsp; ellkdbaphhldpeajbepobaecooaoafpg&lt;br /&gt;
+&amp;emsp; Fetch.ai Network Wallet&lt;br /&gt;
+&amp;emsp; iokeahhehimjnekafflcihljlcjccdbe&lt;br /&gt;
+&amp;emsp; Alby Wallet&lt;br /&gt;
+&amp;emsp; omajpeaffjgmlpmhbfdjepdejoemifpe&lt;br /&gt;
+&amp;emsp; xBull Wallet&lt;br /&gt;
+&amp;emsp; pgojdfajgcjjpjnbpfaelnpnjocakldb&lt;br /&gt;
+&amp;emsp; Sugarchain Wallet&lt;br /&gt;
+&amp;emsp; pnndplcbkakcplkjnolgbkdgjikjednm&lt;br /&gt;
+&amp;emsp; Tronium&lt;br /&gt;
+&amp;emsp; fnnegphlobjdpkhecapkijjdkgcjhkib&lt;br /&gt;
+&amp;emsp; Harmony&lt;br /&gt;
+&amp;emsp; fhilaheimglignddkjgofkcbgekhenbh&lt;br /&gt;
+&amp;emsp; Oxygen&lt;br /&gt;
+&amp;emsp; cmbagcoinhmacpcgmbiniijboejgiahi&lt;br /&gt;
+&amp;emsp; JustLiquidity Wallet&lt;br /&gt;
+&amp;emsp; kmmolakhbgdlpkjkcjkebenjheonagdm&lt;br /&gt;
+&amp;emsp; AlgoSigner&lt;br /&gt;
+&amp;emsp; fnabdmcgpkkjjegokfcnfbpneacddpfh&lt;br /&gt;
+&amp;emsp; Goldmint Lite Wallet&lt;br /&gt;
+&amp;emsp; bgpipimickeadkjlklgciifhnalhdjhe&lt;br /&gt;
+&amp;emsp; GeroWallet&lt;br /&gt;
+&amp;emsp; hoighigmnhgkkdaenafgnefkcmipfjon&lt;br /&gt;
+&amp;emsp; EO.Finance&lt;br /&gt;
+&amp;emsp; nlgnepoeokdfodgjkjiblkadkjbdfmgd&lt;br /&gt;
+&amp;emsp; Multi Wallet&lt;br /&gt;
+&amp;emsp; nhihjlnjgibefgjhobhcphmnckoogdea&lt;br /&gt;
+&amp;emsp; Waves Enterprise Wallet&lt;br /&gt;
+&amp;emsp; ehibhohmlpipbaogcknmpmiibbllplph&lt;br /&gt;
+&amp;emsp; Bluehelix Wallet&lt;br /&gt;
+&amp;emsp; magbanejlegnbcppjljfhnmfmghialkl&lt;br /&gt;
+&amp;emsp; Nebulas Wallet&lt;br /&gt;
+&amp;emsp; fgkaeeikaoeiiggggbgdcjchmdfmamla&lt;br /&gt;
+&amp;emsp; Vtimes&lt;br /&gt;
+&amp;emsp; pnlfjmlcjdjgkddecgincndfgegkecke&lt;br /&gt;
+&amp;emsp; Crocobit Wallet&lt;br /&gt;
+&amp;emsp; bhghoamapcdpbohphigoooaddinpkbai&lt;br /&gt;
+&amp;emsp; Authenticator&lt;br /&gt;
+&amp;emsp; gaedmjdfmmahhbjefcbgaolhhanlaolb&lt;br /&gt;
+&amp;emsp; Authy&lt;br /&gt;
+&amp;emsp; oeljdldpnmdbchonielidgobddffflal&lt;br /&gt;
+&amp;emsp; EOS Authenticator&lt;br /&gt;
+&amp;emsp; ilgcnhelpchnceeipipijaljkblbcobl&lt;br /&gt;
+&amp;emsp; GAuth Authenticator&lt;br /&gt;
+&amp;emsp; imloifkgjagghnncjkhggdhalmcnfklk&lt;br /&gt;
+&amp;emsp; Trezor Password Manager&lt;br /&gt;
+&amp;emsp; %s\%s\Local Extension Settings\%s&lt;br /&gt;
+&amp;emsp; %s\CURRENT&lt;br /&gt;
+&amp;emsp; %s\%s\Sync Extension Settings\%s&lt;br /&gt;
+&amp;emsp; %s\%s\IndexedDB\chrome-extension_%s_0.indexeddb.leveldb&lt;br /&gt;
+&amp;emsp; Plugins\&lt;br /&gt;
+&amp;emsp; HARDWARE\DESCRIPTION\System\CentralProcessor\0&lt;br /&gt;
+&amp;emsp; ProcessorNameString&lt;br /&gt;
+&amp;emsp; SOFTWARE\Microsoft\Windows NT\CurrentVersion&lt;br /&gt;
+&amp;emsp; ProductName&lt;br /&gt;
+&amp;emsp; x64&lt;br /&gt;
+&amp;emsp; x86&lt;br /&gt;
+&amp;emsp; DISPLAY&lt;br /&gt;
+&amp;emsp; SOFTWARE\Microsoft\Cryptography&lt;br /&gt;
+&amp;emsp; MachineGuid&lt;br /&gt;
+&amp;emsp; SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall&lt;br /&gt;
+&amp;emsp; DisplayName&lt;br /&gt;
+&amp;emsp; DisplayVersion&lt;br /&gt;
+&amp;emsp; screenshot.jpg&lt;br /&gt;
+&amp;emsp; ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890&lt;br /&gt;
+&amp;emsp; /c timeout /t 5 &amp;amp; del /f /q &quot;%s&quot; &amp;amp; exit&lt;br /&gt;
+&amp;emsp; C:\Windows\System32\cmd.exe&lt;br /&gt;
+&lt;/details&gt;
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;dynamic-linking&quot;&gt;Dynamic linking&lt;/h1&gt;
+
+&lt;p&gt;The adress of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetProcAddress()&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;LoadLibraryA()&lt;/code&gt;  is retrieved by the same method in Dynamic_Linking_1  looping over the exported functions of the kernel32.DLL , then it uses  &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;LoadLibraryA()&lt;/code&gt; to Load the specified module into the address space and get a handle that get passed to  &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetProcAddress()&lt;/code&gt; to retrieve the address of an exported function from the specified dynamic-link library.&lt;br /&gt;
+Dynamic_Linking_2 is loading the APIs only needed to do some checks if it passes it will load others needed for stealing functionality.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/11.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;dword_42774 is &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetProcAddress()&lt;/code&gt; it is called in other function which is Dynamic_Linking_3 that will load other APIs needed for stealing functionality.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/12.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;We use idapython to rename the global variables with the api name to make reversing easier&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/13.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;idc&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;start_Addrs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00415F86&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00415FC0&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x004161A0&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;end_Addrs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00415FB7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00416176&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x00417034&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;string_list&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start_Addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start_Addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end_Addrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;push&quot;&lt;/span&gt;  &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_imm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_strlit_contents&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;decode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;mov&quot;&lt;/span&gt;  &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_reg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_mem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;temp_name&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Str_&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;temp_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]:&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;temp_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;::]&lt;/span&gt;
+
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;mov&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_mem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_reg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SN_NOWARN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+        &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h1 id=&quot;anti-sandbox&quot;&gt;Anti-Sandbox&lt;/h1&gt;
+
+&lt;p&gt;Since a lot of sandboxes hook and bypass &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Sleep()&lt;/code&gt; preventing malware being idle over their execution time.
+The malware first calls   &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetTickCount()&lt;/code&gt; function that retrieves the number of milliseconds that have elapsed since the system was started, up to 49.7 days, that is our first timestamp. Then calls the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Sleep()&lt;/code&gt; to suspend itself for 16 seconds. calling &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetTickCount()&lt;/code&gt; again gets our second timestamp . The malware checks if at least 12 seconds diffrence between the 2 timestampes . If the function returns flase it means that the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Sleep()&lt;/code&gt; hasn’t been skipped the malware assumes that it is running in a sandbox and exits immediately.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/15.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h1 id=&quot;anti-cis&quot;&gt;Anti-CIS&lt;/h1&gt;
+
+&lt;p&gt;This is one of the easy tricks to check if the malware is not infected users from specific countries.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/16.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;Mars checks the user language to determine if it’s part of the Commonwealth of Independent States (CIS) countrie it gets the user language ID by using GetUserDefaultLangID and it compares the user language ID to:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Language ID&lt;/th&gt;
+      &lt;th&gt;Country&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0x43F&lt;/td&gt;
+      &lt;td&gt;Kazakhstan&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0x443&lt;/td&gt;
+      &lt;td&gt;Uzbekistan&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0x82C&lt;/td&gt;
+      &lt;td&gt;Azerbaijan&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0x43Fu&lt;/td&gt;
+      &lt;td&gt;Kazakhstan&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0x419u&lt;/td&gt;
+      &lt;td&gt;Russia&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0x423u&lt;/td&gt;
+      &lt;td&gt;Belarus&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;If the user language ID matches one of the IDs above, it will exit.&lt;/p&gt;
+
+&lt;h1 id=&quot;anti-emulation&quot;&gt;Anti-Emulation&lt;/h1&gt;
+
+&lt;p&gt;If the malware is executed with the computer name &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;HAL9TH&lt;/code&gt;  and the username with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;JohnDoe&lt;/code&gt;  it will exit . This check is done because it is the name given to the Windows Defender Emulator, this technique is used by malware to prevent itself from running in an emulated environment.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/17.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h1 id=&quot;mutex&quot;&gt;Mutex&lt;/h1&gt;
+
+&lt;p&gt;The malware creates a mutex object using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;CreateMutexA()&lt;/code&gt; to avoid having more than one instance running.  Then calls&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt; GetLastError() &lt;/code&gt;which gets the last error, and if the error code is equal to 183 (ERROR_ALREADY_EXIST) it means that mutex already exists and an instance of the malware is already running therefore malware exits.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/18.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h1 id=&quot;anti-debug&quot;&gt;Anti-Debug&lt;/h1&gt;
+
+&lt;p&gt;The malware create thread that checks &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;BeingDebugged&lt;/code&gt; flag which is Special flag in system tables, which dwell in process memory and which an operation system sets, can be used to indicate that the process is being debugged. The states of these flags can be verified either by using specific API functions or examining the system tables in memory. 
+If the malware is being debugged it exits . 
+The thread is going to keep running until the malware finishes excution or the thread end the malware excution if its being debugged .&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/19.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/20.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/21.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/22.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h1 id=&quot;expiration-check&quot;&gt;Expiration check&lt;/h1&gt;
+
+&lt;p&gt;The Expiration date variable contains the date 26/04/2022 20:00:00.&lt;/p&gt;
+
+&lt;p&gt;Mars uses &lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemtime&quot;&gt;GetSystemTime()&lt;/a&gt; to get current system date and time as &lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime&quot;&gt;SYSTEMTIME&lt;/a&gt; structe, then calls &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sscanf()&lt;/code&gt; to parse the Expiration date to a SYSTEMTIME structe . &lt;a href=&quot;https://docs.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-systemtimetofiletime&quot;&gt;SystemTimeToFileTime()&lt;/a&gt; take SYSTEMTIME structe as argument then convert it to file time and Expiration date although is converted to file time.&lt;/p&gt;
+
+&lt;p&gt;If the current time exceedes the Expiration time, the malware calls &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ExitProcess()&lt;/code&gt; to exit immediately.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/24.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h1 id=&quot;main-functionality&quot;&gt;Main Functionality&lt;/h1&gt;
+
+&lt;table&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/53.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/53.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/49.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/49.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Mars generate random string that will be the name of the zip file contains stolen data.&lt;/p&gt;
+
+&lt;p&gt;The communications between c2 and the malware is described as:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;sends a GET request to the C2 URL on the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/RyC66VfSGP.php&lt;/code&gt; endpoint to grab its configuration .&lt;/li&gt;
+  &lt;li&gt;fetches all DLLs on the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/request&lt;/code&gt; endpoint, the libraries are zipped&lt;/li&gt;
+  &lt;li&gt;Stolen data are posted to the C2 on the same URL used in step 1.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Dlls retrieved:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;DLL Name&lt;/th&gt;
+      &lt;th&gt;Description&lt;/th&gt;
+      &lt;th&gt;Save path&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;sqlite3.dll&lt;/td&gt;
+      &lt;td&gt;Enables SQLite related operations&lt;/td&gt;
+      &lt;td&gt;none (mars doesnt write it on disk, parsed from memory)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;freebl3.dll&lt;/td&gt;
+      &lt;td&gt;Library for the NSS (Gecko-based browsers)&lt;/td&gt;
+      &lt;td&gt;C:\ProgramData\freebl3.dll&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;mozglue.dll&lt;/td&gt;
+      &lt;td&gt;Mozilla Browser Library&lt;/td&gt;
+      &lt;td&gt;C:\ProgramData\mozglue.dll&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;msvcp140.dll&lt;/td&gt;
+      &lt;td&gt;Visual C++ Runtime 2015&lt;/td&gt;
+      &lt;td&gt;C:\ProgramData\msvcp140.dll&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;nss3.dll&lt;/td&gt;
+      &lt;td&gt;Network System Services Library (Gecko-based browsers)&lt;/td&gt;
+      &lt;td&gt;C:\ProgramData\nss3.dll&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;softokn3.dll&lt;/td&gt;
+      &lt;td&gt;Mozilla Browser Library&lt;/td&gt;
+      &lt;td&gt;C:\ProgramData\softokn3.dll&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;vcruntime140.dll&lt;/td&gt;
+      &lt;td&gt;Visual C++ Runtime 2015&lt;/td&gt;
+      &lt;td&gt;C:\ProgramData\vcruntime140.dll&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Another diffrence from the last version is that sqlite3 isnt written on disk, it just get parsed and passed to another function to get handle to it and start loading needed function , the other dll are written .&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/52.png&quot; /&gt; 
+&lt;/p&gt;
+&lt;p&gt;Since the C2 was down i got the pcap from &lt;a href=&quot;https://tria.ge/220406-k1kttacaf2&quot;&gt;Hatching sandbox&lt;/a&gt;.&lt;/p&gt;
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/26.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/27.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h2 id=&quot;understanding-configuration-format&quot;&gt;Understanding Configuration Format&lt;/h2&gt;
+&lt;p&gt;configuration is base64 encoded&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;MXwxfDF8MXwxfDVxRGxQdVZLb1J8RGlzY29yZHwwfCVBUFBEQVRBJVxkaXNjb3JkXExvY2FsIFN0b3JhZ2VcfCp8MXwwfDB8VGVsZWdyYW1
+8MHwlQVBQREFUQSVcVGVsZWdyYW0gRGVza3RvcFx0ZGF0YVx8KkQ4NzdGNzgzRDVEM0VGOEMqLCptYXAqLCpjb25maWdzKnwxfDB8MHw=&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;1|1|1|1|1|5qDlPuVKoR|Discord|0|%APPDATA%\discord\Local Storage\ |*|1|0|0|Telegram|0|%APPDATA%\Telegram Desktop\tdata\ |*D877F783D5D3EF8C*,*map*,*configs*|1|0|0|&lt;/code&gt;&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;base64&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;config&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;base64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b64decode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;MXwxfDF8MXwxfDVxRGxQdVZLb1J8RGlzY29yZHwwfCVBUFBEQVRBJVxkaXNjb3JkXExvY2FsIFN0b3JhZ2VcfCp8MXwwfDB8VGVsZWdyYW18MHwlQVBQREFUQSVcVGVsZWdyYW0gRGVza3RvcFx0ZGF0YVx8KkQ4NzdGNzgzRDVEM0VGOEMqLCptYXAqLCpjb25maWdzKnwxfDB8MHw=&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;decode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;config&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;config&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;|&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;First Part : &lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;config&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;Second Part :&quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;config&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;config&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;First Part : 
+ ['1', '1', '1', '1', '1', '5qDlPuVKoR']
+Second Part :
+['Discord', '0', '%APPDATA%\\discord\\Local Storage\\', '*', '1', '0', '0']
+['Telegram', '0', '%APPDATA%\\Telegram Desktop\tdata\\', '*D877F783D5D3EF8C*,*map*,*configs*', '1', '0', '0']
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;First part&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Config&lt;/th&gt;
+      &lt;th&gt;Meaning&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1&lt;/td&gt;
+      &lt;td&gt;Downloads_history_Flag&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1&lt;/td&gt;
+      &lt;td&gt;Browser_History_Flag&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1&lt;/td&gt;
+      &lt;td&gt;Autofill_Flag&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1&lt;/td&gt;
+      &lt;td&gt;ScreenShoot_Flag&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1&lt;/td&gt;
+      &lt;td&gt;Self_Deletion_Flag&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;5qDlPuVKoR&lt;/td&gt;
+      &lt;td&gt;Explorer Credentials FileName&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Second part&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Config&lt;/th&gt;
+      &lt;th&gt;Meaning&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Discord&lt;/td&gt;
+      &lt;td&gt;name for the zip file – will contain all the stolen files that related to the current task.so the name for the zip will be name.zip.&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0&lt;/td&gt;
+      &lt;td&gt;maybe max size (no indecation of use)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;%APPDATA%\discord\Local Storage\&lt;/td&gt;
+      &lt;td&gt;An environment variable name and folder name – a starting point for the recursive Grabber.&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;*&lt;/td&gt;
+      &lt;td&gt;A regex list – contains multiply parameters that are separated by “,” each one of them is a regex that represents a file type.&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1&lt;/td&gt;
+      &lt;td&gt;is_Recursive&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0&lt;/td&gt;
+      &lt;td&gt;Write to zip enabled if 0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;0&lt;/td&gt;
+      &lt;td&gt;Exclusion List&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;grabber&quot;&gt;Grabber&lt;/h2&gt;
+
+&lt;p&gt;lets dig into &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Config_Grabber&lt;/code&gt; function to see how you it works&lt;/p&gt;
+
+&lt;p&gt;after receiving the config we can see the it has a lot of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;|&lt;/code&gt; so it split the config with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;|&lt;/code&gt; delimiter and loop through the splited config.
+the first part enables/disable some of the stealer functionality then it starts in part 2 which start grapping files wanted.&lt;/p&gt;
+
+&lt;p&gt;as example&lt;/p&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;[‘Discord’, ‘0’, ‘%APPDATA%\discord\Local Storage\’, ‘*’, ‘1’, ‘0’, ‘0’]&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;it start recurseively grabbing all files in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;discord\\Local Storage\\&lt;/code&gt;  under &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;%APPDATA%&lt;/code&gt; and put them in discord.zip&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/30.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/30.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/31.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/31.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/32.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/32.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;a href=&quot;/assets/malware-analysis/Mars/33.png&quot;&gt;&lt;img src=&quot;/assets/malware-analysis/Mars/33.png&quot; alt=&quot;0&quot; /&gt;&lt;/a&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;If there is more than one regex as in&lt;/p&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;[‘Telegram’, ‘0’, ‘%APPDATA%\Telegram Desktop\tdata\’, ‘&lt;em&gt;D877F783D5D3EF8C&lt;/em&gt;,&lt;em&gt;map&lt;/em&gt;,&lt;em&gt;configs&lt;/em&gt;’, ‘1’, ‘0’, ‘0’]&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;it loops through them and call &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Recursive_Grabber&lt;/code&gt; with each regex .&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/34.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h2 id=&quot;browsers&quot;&gt;Browsers&lt;/h2&gt;
+&lt;p&gt;Mars steals credentials from browsers by static paths. It has four different methods to steal data from different types of browses, like Gecko-based browsers, Opera, Internet Explorer and Chromium-based browsers.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/43.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/44.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/45.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/46.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h3 id=&quot;data-extraction&quot;&gt;Data Extraction&lt;/h3&gt;
+
+&lt;p&gt;All the extraction functions have the same scheme:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;The malware saves the addresses of the functions from sqlite3.dll
+    &lt;ul&gt;
+      &lt;li&gt;sqlite3_open&lt;/li&gt;
+      &lt;li&gt;sqlite3_prepare_v2&lt;/li&gt;
+      &lt;li&gt;sqlite3_step&lt;/li&gt;
+      &lt;li&gt;sqlite3_column_bytes&lt;/li&gt;
+      &lt;li&gt;sqlite3_column_blob&lt;/li&gt;
+      &lt;li&gt;sqlite3_column_text&lt;/li&gt;
+      &lt;li&gt;sqlite3_column_finalize&lt;/li&gt;
+      &lt;li&gt;sqlite3_column_close&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;It generates a random string (length of 8 characters) and copies the DB file to a temp folder named like the random
+string – all the extractions methods will be on the copied DB.
+In order to extract the data from the DB, the malware has to create the SQL query and query the DB using sqlite3.dll functions.&lt;/li&gt;
+  &lt;li&gt;The malware opens the DB by using sqlite3_open and passes the DB path.&lt;/li&gt;
+  &lt;li&gt;It calls to sqlite3_prepare_v2, the function gets a handle to DB and the SQL query and returns a statement handle.&lt;/li&gt;
+  &lt;li&gt;By using sqlite3_column_bytes/sqlite3_column_blob/sqlite3_column_text, the malware can get the results from the queries&lt;/li&gt;
+  &lt;li&gt;The Credentials in Chromium-based browsers DB are encrypted by DPAPI and, therefore, the malware uses the function CryptUnprotectData to decrypt the Credentials.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Mars steals information from the Windows Vault, which is the default storage vault for the credential manager information. This is done through the use of Vaultcli.dll, which encapsulates the necessary functions to access the Vault. The malware loops through its items using:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;VaultEnumerateVaults&lt;/li&gt;
+  &lt;li&gt;VaultOpenVault&lt;/li&gt;
+  &lt;li&gt;VaultEnumerateItems&lt;/li&gt;
+  &lt;li&gt;VaultGetItem&lt;/li&gt;
+  &lt;li&gt;VaultFree&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;targeted-db-files&quot;&gt;Targeted DB Files&lt;/h3&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;File Name&lt;/th&gt;
+      &lt;th&gt;Affected Software&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;History&lt;/td&gt;
+      &lt;td&gt;Chromium-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Login Data&lt;/td&gt;
+      &lt;td&gt;Chromium-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Cookies&lt;/td&gt;
+      &lt;td&gt;Chromium-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Web Data&lt;/td&gt;
+      &lt;td&gt;Chromium-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;formhistory.sqlite&lt;/td&gt;
+      &lt;td&gt;Gecko-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;cookies.sqlite&lt;/td&gt;
+      &lt;td&gt;Gecko-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;signongs.sqlite&lt;/td&gt;
+      &lt;td&gt;Gecko-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;places.sqlite&lt;/td&gt;
+      &lt;td&gt;Gecko-based browsers&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;queries-used&quot;&gt;Queries Used&lt;/h3&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Query&lt;/th&gt;
+      &lt;th&gt;Target Browser&lt;/th&gt;
+      &lt;th&gt;Enabled&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT target_path, tab_url from downloads&lt;/td&gt;
+      &lt;td&gt;chromium , opera&lt;/td&gt;
+      &lt;td&gt;by default this feature is disabled,  enabled if Downloads_history_Flag is set to 1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT name, value FROM autofill&lt;/td&gt;
+      &lt;td&gt;chromium , opera&lt;/td&gt;
+      &lt;td&gt;by default this feature is disabled, enabled if Autofill_Flag is set to 1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT url FROM urls&lt;/td&gt;
+      &lt;td&gt;chromium , opera&lt;/td&gt;
+      &lt;td&gt;by default this feature is disabled,enabled if Browser_History_Flag is set to 1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT action_url, username_value, password_value FROM logins&lt;/td&gt;
+      &lt;td&gt;chromium , opera&lt;/td&gt;
+      &lt;td&gt;enabled by default&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT HOST_KEY, is_httponly, path, is_secure, (expires_utc/1000000)-11644480800, name, encrypted_value from cookies&lt;/td&gt;
+      &lt;td&gt;chromium , opera&lt;/td&gt;
+      &lt;td&gt;enabled by default&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards&lt;/td&gt;
+      &lt;td&gt;chromium , opera&lt;/td&gt;
+      &lt;td&gt;enabled by default&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT host, isHttpOnly, path, isSecure, expiry, name, value FROM moz_cookies&lt;/td&gt;
+      &lt;td&gt;gecko&lt;/td&gt;
+      &lt;td&gt;enabled by default&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT url FROM moz_places&lt;/td&gt;
+      &lt;td&gt;gecko&lt;/td&gt;
+      &lt;td&gt;by default this feature is disabled,enabled if Browser_History_Flag is set to 1&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SELECT fieldname, value FROM moz_formhistory&lt;/td&gt;
+      &lt;td&gt;gecko&lt;/td&gt;
+      &lt;td&gt;enabled by default&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;cryptocurrency-wallets-via-browser-extensions&quot;&gt;Cryptocurrency Wallets via browser extensions&lt;/h2&gt;
+
+&lt;p&gt;Mars appears to also target additional Chrome-based browser extensions related to two-factor authentication (2FA) .&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/51.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;Mars steal files from 3 folders :&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;\Local Extension Settings\Extension ID from Google Store&lt;/li&gt;
+  &lt;li&gt;\Sync Extension Settings\ Extension ID from Google Store&lt;/li&gt;
+  &lt;li&gt;\IndexedDB\Domain Name.indexeddb.leveldb&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;as example if the victim uses Google Chrome with a crypto browser wallet extension, the extension files will be stored in:&lt;/p&gt;
+
+&lt;p&gt;C:\Users\Username\AppData\Local\Google\Chrome\User Data\Default\Local Extension Settings\Extension ID from Google Store
+C:\Users\Username\AppData\Local\Google\Chrome\User Data\Default\Sync Extension Settings\ Extension ID from Google Store
+C:\Users\Username\AppData\Local\Google\Chrome\User Data\Default\IndexedDB\Domain Name.indexeddb.leveldb&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Type&lt;/th&gt;
+      &lt;th&gt;Extension name&lt;/th&gt;
+      &lt;th&gt;Extension id&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;TronLink&lt;/td&gt;
+      &lt;td&gt;ibnejdfjmmkpcnlpebklmnkoeoihofec&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;MetaMask&lt;/td&gt;
+      &lt;td&gt;nkbihfbeogaeaoehlefnkodbefgpgknn&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Binance Chain Wallet&lt;/td&gt;
+      &lt;td&gt;fhbohimaelbohpjbbldcngcnapndodjp&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Yoroi&lt;/td&gt;
+      &lt;td&gt;ffnbelfdoeiohenkjibnmadjiehjhajb&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Nifty Wallet&lt;/td&gt;
+      &lt;td&gt;jbdaocneiiinmjbjlgalhcelgbejmnid&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Math Wallet&lt;/td&gt;
+      &lt;td&gt;afbcbjpbpfadlkmhmclhkeeodmamcflc&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Coinbase Wallet&lt;/td&gt;
+      &lt;td&gt;hnfanknocfeofbddgcijnmhnfnkdnaad&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Guarda&lt;/td&gt;
+      &lt;td&gt;hpglfhgfnhbgpjdenjgmdgoeiappafln&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;EQUAL Wallet&lt;/td&gt;
+      &lt;td&gt;blnieiiffboillknjnepogjhkgnoapac&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Jaxx Liberty&lt;/td&gt;
+      &lt;td&gt;cjelfplplebdjjenllpjcblmjkfcffne&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;BitApp Wallet&lt;/td&gt;
+      &lt;td&gt;fihkakfobkmkjojpchpfgcmhfjnmnfpi&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;iWallet&lt;/td&gt;
+      &lt;td&gt;kncchdigobghenbbaddojjnnaogfppfj&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Wombat&lt;/td&gt;
+      &lt;td&gt;amkmjjmmflddogmhpjloimipbofnfjih&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;MEW CX&lt;/td&gt;
+      &lt;td&gt;nlbmnnijcnlegkjjpcfjclmcfggfefdm&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;GuildWallet&lt;/td&gt;
+      &lt;td&gt;nanjmdknhkinifnkgdcggcfnhdaammmj&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Saturn Wallet&lt;/td&gt;
+      &lt;td&gt;nkddgncdjgjfcddamfgcmfnlhccnimig&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Ronin Wallet&lt;/td&gt;
+      &lt;td&gt;fnjhmkhhmkbjkkabndcnnogagogbneec&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;NeoLine&lt;/td&gt;
+      &lt;td&gt;cphhlgmgameodnhkjdmkpanlelnlohao&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Clover Wallet&lt;/td&gt;
+      &lt;td&gt;nhnkbkgjikgcigadomkphalanndcapjk&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Liquality Wallet&lt;/td&gt;
+      &lt;td&gt;kpfopkelmapcoipemfendmdcghnegimn&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Terra Station&lt;/td&gt;
+      &lt;td&gt;aiifbnbfobpmeekipheeijimdpnlpgpp&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Keplr&lt;/td&gt;
+      &lt;td&gt;dmkamcknogkgcdfhhbddcghachkejeap&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Sollet&lt;/td&gt;
+      &lt;td&gt;fhmfendgdocmcbmfikdcogofphimnkno&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Auro Wallet&lt;/td&gt;
+      &lt;td&gt;cnmamaachppnkjgnildpdmkaakejnhae&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Polymesh Wallet&lt;/td&gt;
+      &lt;td&gt;jojhfeoedkpkglbfimdfabpdfjaoolaf&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;ICONex&lt;/td&gt;
+      &lt;td&gt;flpiciilemghbmfalicajoolhkkenfel&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Nabox Wallet&lt;/td&gt;
+      &lt;td&gt;nknhiehlklippafakaeklbeglecifhad&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;KHC&lt;/td&gt;
+      &lt;td&gt;hcflpincpppdclinealmandijcmnkbgn&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Temple&lt;/td&gt;
+      &lt;td&gt;ookjlbkiijinhpmnjffcofjonbfbgaoc&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;TezBox&lt;/td&gt;
+      &lt;td&gt;mnfifefkajgofkcjkemidiaecocnkjeh&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Cyano Wallet&lt;/td&gt;
+      &lt;td&gt;dkdedlpgdmmkkfjabffeganieamfklkm&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Byone&lt;/td&gt;
+      &lt;td&gt;nlgbhdfgdhgbiamfdfmbikcdghidoadd&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;OneKey&lt;/td&gt;
+      &lt;td&gt;infeboajgfhgbjpjbeppbkgnabfdkdaf&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;LeafWallet&lt;/td&gt;
+      &lt;td&gt;cihmoadaighcejopammfbmddcmdekcje&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;DAppPlay&lt;/td&gt;
+      &lt;td&gt;lodccjjbdhfakaekdiahmedfbieldgik&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;BitClip&lt;/td&gt;
+      &lt;td&gt;ijmpgkjfkbfhoebgogflfebnmejmfbml&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Steem Keychain&lt;/td&gt;
+      &lt;td&gt;lkcjlnjfpbikmcmbachjpdbijejflpcm&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Nash Extension&lt;/td&gt;
+      &lt;td&gt;onofpnbbkehpmmoabgpcpmigafmmnjhl&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Hycon Lite Client&lt;/td&gt;
+      &lt;td&gt;bcopgchhojmggmffilplmbdicgaihlkp&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;ZilPay&lt;/td&gt;
+      &lt;td&gt;klnaejjgbibmhlephnhpmaofohgkpgkd&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Crypto&lt;/td&gt;
+      &lt;td&gt;Coin98 Wallet&lt;/td&gt;
+      &lt;td&gt;aeachknmefphepccionboohckonoeemg&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2FA&lt;/td&gt;
+      &lt;td&gt;Authenticator&lt;/td&gt;
+      &lt;td&gt;bhghoamapcdpbohphigoooaddinpkbai&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2FA&lt;/td&gt;
+      &lt;td&gt;Authy&lt;/td&gt;
+      &lt;td&gt;gaedmjdfmmahhbjefcbgaolhhanlaolb&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2FA&lt;/td&gt;
+      &lt;td&gt;EOS Authenticator&lt;/td&gt;
+      &lt;td&gt;oeljdldpnmdbchonielidgobddffflal&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2FA&lt;/td&gt;
+      &lt;td&gt;GAuth Authenticator&lt;/td&gt;
+      &lt;td&gt;ilgcnhelpchnceeipipijaljkblbcobl&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2FA&lt;/td&gt;
+      &lt;td&gt;Trezor Password Manager&lt;/td&gt;
+      &lt;td&gt;imloifkgjagghnncjkhggdhalmcnfklk&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;crypto-wallets&quot;&gt;Crypto Wallets&lt;/h2&gt;
+
+&lt;p&gt;Mars does not just stop at targeting crypto currencies via browser extensions. Many people prefer not to use third-party applications and services to store their digital currency.
+Mars will go through various folders looking for specific files related to cryptocurrency.&lt;/p&gt;
+
+&lt;p&gt;The first paramter detmerines the path if 0 then it’s under %appdata%  if 1 it’s under %localappdata%
+then it search for other wallets with regex &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;*wallet*.dat&lt;/code&gt; under %appdata%&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/36.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;p&gt;Mars have dedicated functionality to target the following crypto wallets:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Wallet name&lt;/th&gt;
+      &lt;th&gt;Wallet folder&lt;/th&gt;
+      &lt;th&gt;Regex&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Ethereum&lt;/td&gt;
+      &lt;td&gt;%appdata%\Ethereum\&lt;/td&gt;
+      &lt;td&gt;keystore&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Electrum&lt;/td&gt;
+      &lt;td&gt;%appdata%\Electrum\wallets\&lt;/td&gt;
+      &lt;td&gt;.&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Electrum LTC&lt;/td&gt;
+      &lt;td&gt;%appdata%\Electrum-LTC\wallets\&lt;/td&gt;
+      &lt;td&gt;.&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Exodus&lt;/td&gt;
+      &lt;td&gt;%appdata%\Exodus\&lt;/td&gt;
+      &lt;td&gt;exodus.conf.json, window-state.json, \Exodus\exodus.wallet\, passphrase.json, seed.seco, info.seco&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Electron Cash&lt;/td&gt;
+      &lt;td&gt;%appdata%\ElectronCash\wallets\&lt;/td&gt;
+      &lt;td&gt;default_wallet&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;MultiDoge&lt;/td&gt;
+      &lt;td&gt;%appdata%\MultiDoge\&lt;/td&gt;
+      &lt;td&gt;multidoge.wallet&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Jaxx&lt;/td&gt;
+      &lt;td&gt;%appdata%\jaxx\Local Storage\&lt;/td&gt;
+      &lt;td&gt;file__0.localstorage&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Atomic&lt;/td&gt;
+      &lt;td&gt;%appdata%\atomic\Local Storage\leveldb\&lt;/td&gt;
+      &lt;td&gt;000003.log, CURRENT, LOCK, LOG, MANIFEST.000001, 0000*&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Binance&lt;/td&gt;
+      &lt;td&gt;%appdata%\Binance\&lt;/td&gt;
+      &lt;td&gt;app-store.json&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Coinomi&lt;/td&gt;
+      &lt;td&gt;%localappdata%\Coinomi\Coinomi\wallets\&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;*.wallet, *.config &lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Other wallets&lt;/td&gt;
+      &lt;td&gt;%appdata%&lt;/td&gt;
+      &lt;td&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;*wallet*.dat&lt;/code&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;system-info&quot;&gt;System info&lt;/h2&gt;
+&lt;p&gt;The malware grabs system info and store it in system.txt file&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;IP and country&lt;/li&gt;
+  &lt;li&gt;Working path to EXE file&lt;/li&gt;
+  &lt;li&gt;Local time and time zone&lt;/li&gt;
+  &lt;li&gt;Language system&lt;/li&gt;
+  &lt;li&gt;Language keyboard layout&lt;/li&gt;
+  &lt;li&gt;Notebook or desktop&lt;/li&gt;
+  &lt;li&gt;Processor model&lt;/li&gt;
+  &lt;li&gt;Computer name&lt;/li&gt;
+  &lt;li&gt;User name&lt;/li&gt;
+  &lt;li&gt;Domain computer name&lt;/li&gt;
+  &lt;li&gt;Machine ID&lt;/li&gt;
+  &lt;li&gt;GUID&lt;/li&gt;
+  &lt;li&gt;Installed software and their versions&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Mars althouge takes screenshot and then add all stolen files to a zip file which it will exfiltrate back to the c2 and get loader config.&lt;/p&gt;
+
+&lt;h2 id=&quot;loader&quot;&gt;Loader&lt;/h2&gt;
+
+&lt;p&gt;Malware gets loader config as a response after exfiltrating data.
+This config looks like  download_URL|An environment variable name and folder name |startup_parameter| .&lt;/p&gt;
+
+&lt;p&gt;After pasring the config Mars calls &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;download_file()&lt;/code&gt; function with the url and a path which the file will be saved in . Then calls &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ShellExecuteExA()&lt;/code&gt; to execute executable with give paramters retrieved from the config.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/37.png&quot; /&gt; 
+&lt;/p&gt;
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/38.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h1 id=&quot;self-deletion&quot;&gt;Self Deletion&lt;/h1&gt;
+
+&lt;p&gt;Malware gets the path to itself by using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetModuleFileName()&lt;/code&gt; and calls &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ShellExecuteExA()&lt;/code&gt; which executes the following command&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;&quot;C:/Windows/System32/cmd.exe&quot; /c timeout /t 5 &amp;amp; del /f / path_To_file &amp;amp; exit&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;After 5 seconds the executable will be deleted.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img class=&quot;image&quot; src=&quot;/assets/malware-analysis/Mars/39.png&quot; /&gt; 
+&lt;/p&gt;
+
+&lt;h1 id=&quot;generalized--idapython-script-using-patterns&quot;&gt;Generalized  idapython Script using patterns&lt;/h1&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;idautils&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idaapi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ida_search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ida_bytes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ida_auto&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;string&lt;/span&gt;
+
+
+
+&lt;span class=&quot;n&quot;&gt;seg_mapping&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idaapi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;getseg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idaapi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;getseg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start_ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idaapi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;getseg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end_ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt;
+                   &lt;span class=&quot;n&quot;&gt;idautils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Segments&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()}&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;seg_mapping&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;seg_mapping&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+    
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;sanitize_string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ascii_letters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])[:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;20&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;capitalize&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;Xor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;&quot;&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;chr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getData&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;key_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prev_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;data_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prev_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;key_length_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prev_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key_length_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;key&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_bytes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;  &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_bytes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;  &lt;span class=&quot;n&quot;&gt;key&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;
+
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;rename_APIs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    
+    &lt;span class=&quot;n&quot;&gt;func_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;20&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;push&quot;&lt;/span&gt;  &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_imm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_strlit_contents&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;decode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;
+        
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;mov&quot;&lt;/span&gt;  &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_reg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_mem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;temp_name&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Str_&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;temp_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]:&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;temp_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;::]&lt;/span&gt;
+                &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;        
+        &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;  &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prev_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        
+    &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;func_addr&lt;/span&gt;
+    
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;20&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print_insn_mnem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;mov&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_mem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;o_reg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SN_NOWARN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+                &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;         
+        &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;API_resolve&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;Loadlibrarya_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x0&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;GetProcAddress_pattern&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;8B 55 ?? 52 8B 45 ?? 8B 4D ??  8B 55 ?? 03 14 ?? 52 E8 ?? ?? ?? ?? 83 C4 ??  85 C0 75 ??&quot;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;GetProcAddress_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ida_search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;find_binary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;GetProcAddress_pattern&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_DOWN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;GetProcAddress_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idaapi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_func&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;GetProcAddress_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start_ea&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'[*] Traget fucntion found at {}'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;hex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;GetProcAddress_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)))&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idautils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;XrefsTo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;GetProcAddress_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;frm&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rename_APIs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Loadlibrarya&quot;&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;Loadlibrarya_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+
+    &lt;span class=&quot;n&quot;&gt;new_GetProcAddress_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idautils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;XrefsTo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;new_GetProcAddress_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;frm&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;rename_APIs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idautils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;XrefsTo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Loadlibrarya_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;frm&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;rename_APIs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+        
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;Strings_resolve&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;xor_pattern&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;8b 4d ?? 03 4d ?? 0f be 19 8b 55 ?? 52 e8 ?? ?? ?? ?? 83 c4 ?? 8b c8 8b 45 ?? 33 d2 f7 f1 8b 45 ?? 0f be 0c 10 33 d9 8b 55 ?? 03 55 ?? 88 1a eb be&quot;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;xor_fun_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ida_search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;find_binary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;xor_pattern&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_DOWN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;xor_fun_addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idaapi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_func&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xor_fun_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start_ea&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'[*] Traget fucntion found at {}'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;hex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xor_fun_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)))&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idautils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;XrefsTo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xor_fun_addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ref&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;frm&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;getData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;decrypt_string&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Xor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_cmt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;decrypt_string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next_head&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_operand_value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;global_var&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Str_&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sanitize_string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;decrypt_string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SN_NOWARN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;Anit_Reverse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;min&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ida_search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;find_binary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BADADDR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;74 ? 75 ?&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_NEXT&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_DOWN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
+                 &lt;span class=&quot;c1&quot;&gt;# JZ / JNZ
+&lt;/span&gt;                 &lt;span class=&quot;n&quot;&gt;ida_search&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;find_binary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BADADDR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;75 ? 74 ?&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+                                        &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_NEXT&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SEARCH_DOWN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# JNZ / JZ
+&lt;/span&gt;        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BADADDR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xEB&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x90&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x90&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;idc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;patch_byte&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ea&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x90&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;Anit_Reverse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;Strings_resolve&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;API_resolve&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;for more Idapython scripts check my &lt;a href=&quot;https://github.com/X-Junior/Malware-IDAPython-Scripts/&quot;&gt;repo&lt;/a&gt; .&lt;/p&gt;
+
+&lt;h1 id=&quot;iocs&quot;&gt;IOCs&lt;/h1&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Hashes:
+    &lt;ol&gt;
+      &lt;li&gt;md5 : 880924E5583978C615DD03FF89648093&lt;/li&gt;
+      &lt;li&gt;sha1 : EF759F6ECA63D6B05A7B6E395DF3571C9703278B&lt;/li&gt;
+      &lt;li&gt;sha256 : 4bcff4386ce8fadce358ef0dbe90f8d5aa7b4c7aec93fca2e605ca2cbc52218b&lt;/li&gt;
+      &lt;li&gt;imphash : 4E06C011D59529BFF8E1F1C88254B928&lt;/li&gt;
+      &lt;li&gt;ssdeep : 3072:U/E8k9fjpIg+zNch12KbAwSaSMtmSu4/bVBt4b8EG:U/E8k9bwz6/tJc/4xM8EG&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Mutex : 92550737836278980100&lt;/li&gt;
+  &lt;li&gt;Files:
+    &lt;ol&gt;
+      &lt;li&gt;C:\ProgramData\freebl3.dll&lt;/li&gt;
+      &lt;li&gt;C:\ProgramData\mozglue.dll&lt;/li&gt;
+      &lt;li&gt;C:\ProgramData\msvcp140.dll&lt;/li&gt;
+      &lt;li&gt;C:\ProgramData\nss3.dll&lt;/li&gt;
+      &lt;li&gt;C:\ProgramData\softokn3.dll&lt;/li&gt;
+      &lt;li&gt;C:\ProgramData\vcruntime140.dll&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+  &lt;li&gt;C2 Server : 194.87.218.39&lt;/li&gt;
+  &lt;li&gt;C2 Domains:
+    &lt;ol&gt;
+      &lt;li&gt;http://194[.]87[.]218[.]39/request&lt;/li&gt;
+      &lt;li&gt;http://194[.]87[.]218[.]39/RyC66VfSGP[.]php&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h1 id=&quot;yara&quot;&gt;YARA&lt;/h1&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;rule&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Mars_Stealer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Mars&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Stealer&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;meta&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;Author&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;X__Junior&quot;&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;Description&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Mars Stealer v8 Detection&quot;&lt;/span&gt;
+
+    &lt;span class=&quot;n&quot;&gt;strings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xor&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;d&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;03&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;d&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;be&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;19&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;55&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;52&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;e8&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;83&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;c4&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;c8&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;45&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;33&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d2&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f7&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;45&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;be&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;c&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;33&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d9&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;b&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;55&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;03&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;55&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;88&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;eb&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;be&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;debug&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;A1&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;30&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;80&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;78&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;02&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+	&lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;thread_func&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B8&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;01&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt;   &lt;span class=&quot;mi&quot;&gt;85&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt;  &lt;span class=&quot;mi&quot;&gt;74&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;E8&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;85&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;74&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;00&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FF&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FF&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;EB&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;??&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;LocalAlloc&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;VirtualProtect&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;SetFileTime&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api4&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;LocalFileTimeToFileTime&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api5&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;HeapFree&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api6&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;VirtualFree&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api7&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;VirtualAlloc&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;DPAPI&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;memset&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;msvcrt.dll&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s4&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;_mbsnbcpy&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+        &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s5&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;_mbsstr&quot;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ascii&lt;/span&gt;
+
+    &lt;span class=&quot;n&quot;&gt;condition&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;uint16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x5A4D&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;of&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;api&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;of&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;debug&lt;/span&gt;  &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xor&lt;/span&gt;  &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;thread_func&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;h1 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h1&gt;
+
+&lt;p&gt;The last sample of mars i saw came packed with custom packer , easy to unpack with x32dbg by just setting a breakpoint on &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;VirtualAlloc()&lt;/code&gt; , nothing else was changed except for the C2 .&lt;/p&gt;
+
+&lt;h1 id=&quot;references&quot;&gt;References&lt;/h1&gt;
+&lt;ul&gt;
+  &lt;li&gt;Great analysis of the previous version &lt;a href=&quot;https://3xp0rt.com/posts/mars-stealer&quot;&gt;https://3xp0rt.com/posts/mars-stealer&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://lp.cyberark.com/rs/316-CZP-275/images/CyberArk-Labs-Racoon-Malware-wp.pdf&quot;&gt;https://lp.cyberark.com/rs/316-CZP-275/images/CyberArk-Labs-Racoon-Malware-wp.pdf&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>Mohamed Ashraf</name></author><category term="Malware Analysis" /><category term="Stealer" /><summary type="html">Introduction</summary></entry></feed>

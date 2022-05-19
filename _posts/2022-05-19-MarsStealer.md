@@ -4,7 +4,7 @@ classes: wide
 
 ribbon: DodgerBlue
 header:
-  teaser: /assets/malware-analysis/Mars/logo1.gif
+  teaser: /assets/Malware-Analysis/Mars/logo1.gif
 description: "Mars Stealer is an improved copy of Oski Stealer. "
 categories:
   - Malware Analysis
@@ -28,7 +28,7 @@ Mars Stealer is an improved copy of Oski Stealer. I saw alot of tweets recently 
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/overview.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/overview.png"> 
 </p> 
 # Anti-Analysis 
 
@@ -40,7 +40,7 @@ However, disassemblers are tricked into thinking that there is a fall-through br
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/1.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/1.png"> 
 </p> 
 
 the deobfuscation is simple, we just need to patch the first conditional jump to an absolute jump and nop out the second jump, we can use IDAPython to achieve this:
@@ -63,13 +63,13 @@ while True:
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/2.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/2.png"> 
 </p> 
 <center><font size="3"> <u>After Running the Script </u></font> </center>
 
 now we can see a clear view , after reversing and renaming
 
-|[![0](/assets/malware-analysis/Mars/3.png)](/assets/malware-analysis/Mars/3.png)|[![0](/assets/malware-analysis/Mars/3-2.png)](/assets/malware-analysis/Mars/3-2.png)|
+|[![0](/assets/Malware-Analysis/Mars/3.png)](/assets/Malware-Analysis/Mars/3.png)|[![0](/assets/Malware-Analysis/Mars/3-2.png)](/assets/Malware-Analysis/Mars/3-2.png)|
 
 
 
@@ -77,31 +77,31 @@ First Mars get a handle to kernel32.dll by parsing `InLoadOrderModuleList` then 
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/4.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/4.png"> 
 </p> 
 # String Encryption
 After that it decrypts some strings used for some checks , the decryption is a simple xor function
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/5.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/5.png"> 
 </p> 
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/6.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/6.png"> 
 </p> 
 
 We can although see that the xor function is refrenced in another function which i renamed as Decrypt_String_2 if the malware passes the checks which we will see soon it decrypt those string which contanis strings needed for the malware to steal sensitive data .
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/8.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/8.png"> 
 </p> 
 
 We use idapython script to get those strings and rename the variables to make reversing easier
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/7.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/7.png"> 
 </p> 
 
 ```python
@@ -795,20 +795,20 @@ The adress of `GetProcAddress()` and `LoadLibraryA()`  is retrieved by the same 
 Dynamic_Linking_2 is loading the APIs only needed to do some checks if it passes it will load others needed for stealing functionality.
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/11.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/11.png"> 
 </p> 
 
 dword_42774 is `GetProcAddress()` it is called in other function which is Dynamic_Linking_3 that will load other APIs needed for stealing functionality.
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/12.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/12.png"> 
 </p> 
 
 We use idapython to rename the global variables with the api name to make reversing easier
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/13.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/13.png"> 
 </p> 
 
 ```python
@@ -848,7 +848,7 @@ Since a lot of sandboxes hook and bypass `Sleep()` preventing malware being idle
 The malware first calls   `GetTickCount()` function that retrieves the number of milliseconds that have elapsed since the system was started, up to 49.7 days, that is our first timestamp. Then calls the `Sleep()` to suspend itself for 16 seconds. calling `GetTickCount()` again gets our second timestamp . The malware checks if at least 12 seconds diffrence between the 2 timestampes . If the function returns flase it means that the `Sleep()` hasn’t been skipped the malware assumes that it is running in a sandbox and exits immediately.
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/15.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/15.png"> 
 </p> 
 
 # Anti-CIS
@@ -857,7 +857,7 @@ This is one of the easy tricks to check if the malware is not infected users fro
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/16.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/16.png"> 
 </p> 
 
 Mars checks the user language to determine if it’s part of the Commonwealth of Independent States (CIS) countrie it gets the user language ID by using GetUserDefaultLangID and it compares the user language ID to:
@@ -880,7 +880,7 @@ If the user language ID matches one of the IDs above, it will exit.
 If the malware is executed with the computer name `HAL9TH`  and the username with `JohnDoe`  it will exit . This check is done because it is the name given to the Windows Defender Emulator, this technique is used by malware to prevent itself from running in an emulated environment.
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/17.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/17.png"> 
 </p> 
 
 # Mutex
@@ -888,7 +888,7 @@ If the malware is executed with the computer name `HAL9TH`  and the username wit
 The malware creates a mutex object using `CreateMutexA()` to avoid having more than one instance running.  Then calls` GetLastError() `which gets the last error, and if the error code is equal to 183 (ERROR_ALREADY_EXIST) it means that mutex already exists and an instance of the malware is already running therefore malware exits.
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/18.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/18.png"> 
 </p> 
 
 # Anti-Debug
@@ -900,21 +900,21 @@ The thread is going to keep running until the malware finishes excution or the t
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/19.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/19.png"> 
 </p> 
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/20.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/20.png"> 
 </p> 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/21.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/21.png"> 
 </p> 
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/22.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/22.png"> 
 </p> 
 
 # Expiration check
@@ -928,14 +928,14 @@ If the current time exceedes the Expiration time, the malware calls `ExitProcess
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/24.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/24.png"> 
 </p> 
  
 
 # Main Functionality
 
 
-|[![0](/assets/malware-analysis/Mars/53.png)](/assets/malware-analysis/Mars/53.png)|[![0](/assets/malware-analysis/Mars/49.png)](/assets/malware-analysis/Mars/49.png)|
+|[![0](/assets/Malware-Analysis/Mars/53.png)](/assets/Malware-Analysis/Mars/53.png)|[![0](/assets/Malware-Analysis/Mars/49.png)](/assets/Malware-Analysis/Mars/49.png)|
 
 Mars generate random string that will be the name of the zip file contains stolen data.
 
@@ -959,15 +959,15 @@ Dlls retrieved:
 Another diffrence from the last version is that sqlite3 isnt written on disk, it just get parsed and passed to another function to get handle to it and start loading needed function , the other dll are written . 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/52.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/52.png"> 
 </p> 
 Since the C2 was down i got the pcap from [Hatching sandbox](https://tria.ge/220406-k1kttacaf2).
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/26.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/26.png"> 
 </p> 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/27.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/27.png"> 
 </p> 
 
 ## Understanding Configuration Format
@@ -1040,8 +1040,8 @@ it start recurseively grabbing all files in `discord\\Local Storage\\`  under `%
 
 
 
-|[![0](/assets/malware-analysis/Mars/30.png)](/assets/malware-analysis/Mars/30.png)|[![0](/assets/malware-analysis/Mars/31.png)](/assets/malware-analysis/Mars/31.png)|
-|[![0](/assets/malware-analysis/Mars/32.png)](/assets/malware-analysis/Mars/32.png)|[![0](/assets/malware-analysis/Mars/33.png)](/assets/malware-analysis/Mars/33.png)|
+|[![0](/assets/Malware-Analysis/Mars/30.png)](/assets/Malware-Analysis/Mars/30.png)|[![0](/assets/Malware-Analysis/Mars/31.png)](/assets/Malware-Analysis/Mars/31.png)|
+|[![0](/assets/Malware-Analysis/Mars/32.png)](/assets/Malware-Analysis/Mars/32.png)|[![0](/assets/Malware-Analysis/Mars/33.png)](/assets/Malware-Analysis/Mars/33.png)|
 
 
 
@@ -1054,7 +1054,7 @@ it loops through them and call `Recursive_Grabber` with each regex .
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/34.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/34.png"> 
 </p> 
 
 ## Browsers
@@ -1062,19 +1062,19 @@ Mars steals credentials from browsers by static paths. It has four different met
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/43.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/43.png"> 
 </p> 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/44.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/44.png"> 
 </p> 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/45.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/45.png"> 
 </p> 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/46.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/46.png"> 
 </p> 
 
 
@@ -1142,7 +1142,7 @@ Mars appears to also target additional Chrome-based browser extensions related t
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/51.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/51.png"> 
 </p> 
 
 Mars steal files from 3 folders :
@@ -1216,7 +1216,7 @@ The first paramter detmerines the path if 0 then it's under %appdata%  if 1 it's
 then it search for other wallets with regex `*wallet*.dat` under %appdata%
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/36.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/36.png"> 
 </p> 
 
 
@@ -1264,10 +1264,10 @@ After pasring the config Mars calls `download_file()` function with the url and 
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/37.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/37.png"> 
 </p> 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/38.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/38.png"> 
 </p> 
 
 # Self Deletion
@@ -1281,7 +1281,7 @@ After 5 seconds the executable will be deleted.
 
 
 <p align="center">
-<img  class="image" src="/assets/malware-analysis/Mars/39.png"> 
+<img  class="image" src="/assets/Malware-Analysis/Mars/39.png"> 
 </p> 
 
 

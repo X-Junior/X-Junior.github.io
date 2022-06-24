@@ -39,7 +39,7 @@ Checking the entry point , there is a constructor called `Home`
 
 [![20.PNG](/assets/Malware-Analysis/SnakeKeylogger/20.PNG)](/assets/Malware-Analysis/SnakeKeylogger/20.PNG)
 
-`Home` constructor has fucntion that intialize its component called  `IntializeComponent`
+`Home` constructor has function that initialize its component called  `IntializeComponent`
 
 
 [![21.PNG](/assets/Malware-Analysis/SnakeKeylogger/21.PNG)](/assets/Malware-Analysis/SnakeKeylogger/21.PNG)
@@ -71,7 +71,7 @@ The DLL name is MLan and it's obfuscated , so i decided to go with the flow , un
 
 The DLL IVectorView is heavily obfuscated even more than the previous stage and since it's not our main payload i won't bother renaming the functions.
 
-I will leave the functions names to make it easy for anyone who is gonna try to unpack this sample.
+I will leave the functions names to make it easy for anyone who is going to try to unpack this sample.
 
 Important Functions executed :
 
@@ -96,7 +96,7 @@ Important Functions executed :
 
 `Lp9PmLMkZmvU1wvfDHu.lk5MbtJFe(text, text2, Lp9PmLMkZmvU1wvfDHu.TMGYWc0mXg)`
 
-- Exclude the path of the newely copied sample , write XML to tmp file , create scheduled task for persistence.
+- Exclude the path of the newly copied sample , write XML to tmp file , create scheduled task for persistence.
 
 `Lp9PmLMkZmvU1wvfDHu.lk5MbtJFe(sW3Asla2NyvByhVDAa.Bis8Nfj2u5, text2, Lp9PmLMkZmvU1wvfDHu.AjQYS6EhjD)`
 
@@ -113,7 +113,7 @@ Important Functions executed :
 
 `IHeoJKYkPinpHknFH9q.lk5MbtJFe(yAWG7ZYlZIPfRxSYSsw.lk5MbtJFe(sW3Asla2NyvByhVDAa.CTs8UfsbAO, yAWG7ZYlZIPfRxSYSsw.v2CYiSRjI0), sW3Asla2NyvByhVDAa.j3J8Ic57Tf, IHeoJKYkPinpHknFH9q.UC8Yj8UgDU)`
 
-- Spwan our main payload using process Hollowing .
+- Spawn our main payload using process Hollowing .
 
 `UeAupokA536JGhxDyO.sW3Asla2NyvByhVDAa.Fgxk5Jy1sG()`
 
@@ -210,7 +210,7 @@ The tmp file has the following  XML :
 
 
 For the last stage of unpacking the malware  uses a local callback function defined by ResolveEventHandler that is registered to AppDomain.CurrentDomain.ResourceResolve, which is then called when it fails to load a resource by name. In addition, it has another local callback function registered to AppDomain.AssemblyResolve, which is called when it fails to load an assembly by name.
-when it falis loading resource by name , `XYtPy3Anye` method is called.
+when it fails loading resource by name , `XYtPy3Anye` method is called.
 
 
 [![37.PNG](/assets/Malware-Analysis/SnakeKeylogger/37.PNG)](/assets/Malware-Analysis/SnakeKeylogger/37.PNG)
@@ -240,7 +240,7 @@ The resource is decrypted in `UeAupokA536JGhxDyO.MH1pvtk8kqaCIqEAbCh.O9RjtGPl7D(
 The program then creates a suspended child process and inject Snake Keylogger payload into the child process. It then resumes the child process to run.  Then the parent process exits 
 
 
-All process hollowing funcionality are under `UeAupokA536JGhxDyO.sW3Asla2NyvByhVDAa.Fgxk5Jy1sG()` method.
+All process hollowing functionality are under `UeAupokA536JGhxDyO.sW3Asla2NyvByhVDAa.Fgxk5Jy1sG()` method.
 
 - Create new process
 
@@ -287,13 +287,13 @@ After reversing and renaming .
 
 
 
-The malware start initializing varibales some of them are not used , the interseting part that the malware set a timer for some functions to execute every 0.1 second.
+The malware start initializing variables some of them are not used , the interesting part that the malware set a timer for some functions to execute every 0.1 second.
 
 These are the functions that executes periodically:
 1. Sending keylogs .
 2. Sending screenshot .
 3. Sending clipboard .
-4. Sending stolen data encrytped .
+4. Sending stolen data encrypted .
 5. Sending stolen data as plaintext .
 
 ## KeyLogging
@@ -337,7 +337,7 @@ It has two Timers. One timer to collect system clipboard data by calling `Clipbo
 
 Before stealing credentials , there are alot of methods that have empty body , it' disabled features in this sample , i tried to get a sample that have those functions enabled but had no luck .
 
-These functions are anti-VM and presistenc method , anti-emulation, Snake adds itself to autorun by changing the registry key:
+These functions are anti-VM and persistence method , anti-emulation, Snake adds itself to autorun by changing the registry key:
 `HKCU\software\microsoft\windows\currentversion\run` , Snake kill certain processes and check for the presence of some of the virtual machines  files , search for processes specific to virtual machines . it although removes cookies from Chrome and Firefox browsers, as well as data from the general cookie repository in the system ,so that the user has to re-login to accounts in this case, the data will be intercepted using a keylogger .
 
 How did i know that ? , while searching for samples to test my config extractor  ,  i found a sample that have those functions named but still empty body, lucky me .
@@ -428,7 +428,7 @@ Snake steals credentials from FTP clients, Email clients, Messengers , Browsers 
 3. Decrypt Passwords.
 4. Append to the global variable.
 
-More details about stealing mechaism in my report about Mars stealer , it's pretty much the same.
+More details about stealing mechanism in my report about Mars stealer , it's pretty much the same.
 
 Snake tries to load moazglue.dll and nss3.dll by checking if certain browsers is installed and try to load the DLLs from one of these paths.
 
@@ -466,12 +466,12 @@ Email body: `PW Username Snake `
 
 Attachment: 
 
-- Passwords.txt contians
+- Passwords.txt contains
 `PW  UserName Snake VictimInfo Passwords_Logs `  in `unicode`
 		
 - User.txt same as Passwords.txt but in `ascii`
 
-VictimInfo contians `PC name , date and time , client IP ,  countery name`
+VictimInfo contains `PC name , date and time , client IP ,  country name`
 
 All data is sent as an attachment. It might be encrypted with DES or be plaintext .
 

@@ -252,7 +252,7 @@ All process hollowing funcionality are under `UeAupokA536JGhxDyO.sW3Asla2NyvByhV
 
 	[![41.PNG](/assets/Malware-Analysis/SnakeKeylogger/41.PNG)](/assets/Malware-Analysis/SnakeKeylogger/41.PNG)
 
-- Write process memeory
+- Write process memory
 
 	`BBDYpjYA3gIOGArn7ck.lk5MbtJFe()`  
 
@@ -274,7 +274,7 @@ Snake Keylogger is obfuscated . let's  Use `de4dot` to make it more readable.
 
 [![45.PNG](/assets/Malware-Analysis/SnakeKeylogger/45.PNG)](/assets/Malware-Analysis/SnakeKeylogger/45.PNG) | [![46.PNG](/assets/Malware-Analysis/SnakeKeylogger/46.PNG)](/assets/Malware-Analysis/SnakeKeylogger/46.PNG)
 
-After reversing the and renaming .
+After reversing and renaming .
 
 
 

@@ -209,8 +209,7 @@ The tmp file has the following  XML :
 ### Load DLL at runtime
 
 
-For the last stage of unpacking the malware  uses a local callback function defined by ResolveEventHandler that is registered to AppDomain.CurrentDomain.ResourceResolve, which is then called when it fails to load a resource by name. In addition, it has another local callback function registered to AppDomain.AssemblyResolve, which is called when it fails to load an assembly by name.
-when it fails loading resource by name , `XYtPy3Anye` method is called.
+For the last stage of unpacking the malware  uses a local callback function  `XYtPy3Anye` that is registered to AppDomain.CurrentDomain.ResourceResolve, which is then called when it fails to load a resource by name. 
 
 
 [![37.PNG](/assets/Malware-Analysis/SnakeKeylogger/37.PNG)](/assets/Malware-Analysis/SnakeKeylogger/37.PNG)
@@ -218,7 +217,7 @@ when it fails loading resource by name , `XYtPy3Anye` method is called.
 
 [![38.PNG](/assets/Malware-Analysis/SnakeKeylogger/38.PNG)](/assets/Malware-Analysis/SnakeKeylogger/38.PNG)
 
-The malware reads a resource named `6XrMbvA` from the current module, which has no such named resource in the resource directory. A resource loading failure occurs and the registered local ResolveEventHandler function is called to solve this error. This then causes a loading assembly failure and its assembly resolve callback function is called.
+The malware reads a resource named `6XrMbvA` from the current module, which has no such named resource in the resource directory. A resource loading failure occurs and the registered local  function is called  `XYtPy3Anye` to solve this error. 
 
 [![33.PNG](/assets/Malware-Analysis/SnakeKeylogger/33.PNG)](/assets/Malware-Analysis/SnakeKeylogger/33.PNG)
 
